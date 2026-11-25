@@ -25,6 +25,7 @@ RESULT_ROW = '[role="row"].rros-ui-lib-table__row'
 NO_RESULTS = "По заданным критериям поиска объекты не найдены"
 CARD = ".realestate-object-modal .build-card-wrapper.card"
 FIELD = "build-card-wrapper__info__ul__subinfo"
+SCREENSHOT_DELAY_SECONDS = 0.5
 SHEET = "Результаты"
 HEADERS = ("Адрес", "Успешен ли поиск", "Форма собственности", "Название файла скриншота")
 
@@ -234,6 +235,7 @@ def lookup(page: Page, address: str, timeout_ms: int) -> tuple[str, bytes] | Non
     if field_value(card, "Кадастровый номер") != number:
         raise RuntimeError(f"Кадастровый номер карточки не совпадает с номером результата {number!r}.")
     ownership = field_value(card, "Форма собственности")
+    time.sleep(SCREENSHOT_DELAY_SECONDS)
     require_session(page)
     return ownership, card.screenshot(type="png", animations="disabled", scale="css", timeout=30_000)
 
