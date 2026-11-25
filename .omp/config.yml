@@ -1,2 +1,10 @@
 browser:
   enabled: false
+modelRoles:
+  default: "ollama/gemma4:31b"
+  slow: "@default"
+  advisor: "openai-codex/gpt-6.2-sol"
+
+cycleOrder:
+  - smol
+  - default
