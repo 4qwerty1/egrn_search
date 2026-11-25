@@ -12,3 +12,8 @@ dependencies = [
     "playwright>=1.51",
     "tqdm",
 ]
+
+[dependency-groups]
+dev = [
+    "wemake-python-styleguide==1.9.0",
+]
