@@ -12,42 +12,50 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 
 SHEET = "Результаты"
-HEADERS = ("Адрес", "Успешен ли поиск", "Форма собственности", "Название файла скриншота")
-FOUND_COLUMN = 2
+HEADERS = ("Номер ЛС", "Адрес", "Успешен ли поиск", "Форма собственности", "Название файла скриншота")
+FOUND_COLUMN = 3
 
 type SheetRow = tuple[object, ...]
-type ResultFields = tuple[str, bool, str | None, str | None]
+type ResultFields = tuple[str, str, bool, str | None, str | None]
+type RowIndex = dict[tuple[str, str], int]
 
 
 class ResultSheet:
-    def __init__(self, path: Path, workbook: Workbook, sheet: Worksheet, rows: dict[str, int]) -> None:
+    def __init__(
+        self, path: Path, workbook: Workbook, sheet: Worksheet, rows: RowIndex,
+    ) -> None:
         self._path: Path = path
         self._workbook: Workbook = workbook
         self._sheet: Worksheet = sheet
-        self._rows: dict[str, int] = rows
+        self._rows = rows
 
-    def has_success(self, address: str) -> bool:
-        row = self._rows.get(address)
+    def has_success(self, account: str, address: str) -> bool:
+        row = self._rows.get((account, address))
         return row is not None and self._sheet.cell(row, FOUND_COLUMN).value is True
 
-    def save(self, address: str, match: tuple[str, bytes] | None) -> None:
+    def save(
+        self, address: str, accounts: list[str],
+        match: tuple[str, bytes] | None,
+    ) -> None:
         ownership = None
         filename = None
         if match is not None:
             ownership, png = match
             filename = _store_screenshot(self._path.parent, address, png)
 
-        row = self._rows.get(address)
-        if row is None:
-            row = self._sheet.max_row + 1
-        fields = (address, match is not None, ownership, filename)
-        self._write_row(row, fields)
+        for account in accounts:
+            self._write_row((account, address, match is not None, ownership, filename))
         _publish(self._path, self._workbook.save)
 
     def close(self) -> None:
         self._workbook.close()
 
-    def _write_row(self, row: int, fields: ResultFields) -> None:
+    def _write_row(self, fields: ResultFields) -> None:
+        key = fields[:2]
+        row = self._rows.get(key)
+        if row is None:
+            row = self._sheet.max_row + 1
+            self._rows[key] = row
         for column, entry in enumerate(fields, start=1):
             cell = cast(Cell, self._sheet.cell(row, column))
             cell.value = entry
@@ -82,24 +90,27 @@ def _validate_header(path: Path, header: SheetRow) -> None:
         raise ValueError(f"{path.name}: неверные заголовки листа «{SHEET}».")
 
 
-def _check_address(path: Path, number: int, address: object, rows: dict[str, int]) -> str:
+def _check_key(path: Path, number: int, columns: SheetRow) -> tuple[str, str]:
+    account, address = columns[:2]
+    if not isinstance(account, str) or not account.strip():
+        raise ValueError(f"{path.name}: нет номера ЛС в строке {number}.")
     if not isinstance(address, str) or not address.strip():
         raise ValueError(f"{path.name}: нет адреса в строке {number}.")
-    if address in rows:
-        raise ValueError(f"{path.name}: повтор адреса {address!r} в строке {number}.")
-    return address
+    found = columns[FOUND_COLUMN - 1]
+    if found is not True and found is not False:
+        raise ValueError(f"{path.name}: в строке {number} флаг поиска не Boolean.")
+    return account, address
 
 
-def _index_rows(path: Path, row_entries: Iterator[SheetRow]) -> dict[str, int]:
-    rows: dict[str, int] = {}
+def _index_rows(path: Path, row_entries: Iterator[SheetRow]) -> RowIndex:
+    rows: RowIndex = {}
     for number, columns in enumerate(row_entries, start=2):
         if all(entry is None for entry in columns):
             continue
-        address, found = columns[:FOUND_COLUMN]
-        address = _check_address(path, number, address, rows)
-        if found is not True and found is not False:
-            raise ValueError(f"{path.name}: в строке {number} флаг поиска не Boolean.")
-        rows[address] = number
+        key = _check_key(path, number, columns)
+        if key in rows:
+            raise ValueError(f"{path.name}: повтор пары ЛС и адреса {key!r} в строке {number}.")
+        rows[key] = number
     return rows
 
 

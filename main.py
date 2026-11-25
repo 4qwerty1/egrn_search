@@ -2,9 +2,9 @@ import sys
 import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager, closing
-from itertools import filterfalse
 from pathlib import Path
 
+from openpyxl import load_workbook
 from playwright.sync_api import Page
 from tqdm import tqdm
 
@@ -14,6 +14,43 @@ import search
 
 SEARCH_DELAY_SECONDS = 5
 EXIT_INTERRUPTED = 130
+
+
+def _address_fields(
+    path: Path, number: int, columns: tuple[object, ...],
+) -> tuple[str, str] | None:
+    account, address = (
+        "" if entry is None else str(entry).strip()
+        for entry in columns
+    )
+    if not (account or address):
+        return None
+    if not (account and address):
+        raise ValueError(f"{path.name}: в строке {number} нужен номер ЛС и адрес.")
+    return account, address
+
+
+def _read_addresses(path: Path) -> dict[tuple[str, str], None]:
+    addresses: dict[tuple[str, str], None] = {}
+    with closing(load_workbook(path, read_only=True, data_only=True)) as workbook:
+        for number, columns in enumerate(
+            workbook.worksheets[0].iter_rows(max_col=2, values_only=True),
+            start=1,
+        ):
+            fields = _address_fields(path, number, columns)
+            if fields is not None:
+                addresses[fields] = None
+    return addresses
+
+
+def _pending_addresses(
+    book: results.ResultSheet, addresses: dict[tuple[str, str], None],
+) -> dict[str, list[str]]:
+    pending: dict[str, list[str]] = {}
+    for account, address in addresses:
+        if not book.has_success(account, address):
+            pending.setdefault(address, []).append(account)
+    return pending
 
 
 class _LookupRun:
@@ -41,16 +78,17 @@ class _LookupRun:
         return 0
 
     def _run_workbook(self, root: Path) -> None:
-        lines = (root / "addresses.txt").read_text(encoding="utf-8-sig").splitlines()
-        addresses = dict.fromkeys(filter(None, map(str.strip, lines)))
+        addresses = _read_addresses(root / "addresses.xlsx")
         with closing(results.load_results(root / "result.xlsx")) as book:
-            pending = list(filterfalse(book.has_success, addresses))
+            pending = _pending_addresses(book, addresses)
             if pending:
                 with self._open_page() as page:
                     rosreestr.prepare_page(page, self._timeout_ms)
                     self._search_pending(page, book, pending)
 
-    def _search_pending(self, page: Page, book: results.ResultSheet, pending: list[str]) -> None:
+    def _search_pending(
+        self, page: Page, book: results.ResultSheet, pending: dict[str, list[str]],
+    ) -> None:
         last_index = len(pending) - 1
         with tqdm(
             total=len(pending), desc="Поиск ЕГРН", unit="адр.",
@@ -63,7 +101,7 @@ class _LookupRun:
                     self._pause(SEARCH_DELAY_SECONDS)
                 match = search.lookup(page, address, self._timeout_ms)
                 rosreestr.require_session(page)
-                book.save(address, match)
+                book.save(address, pending[address], match)
                 progress.update()
                 if match is not None and index < last_index:
                     search.close_card(page)

@@ -8,7 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import NamedTuple
 
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 from playwright import sync_api
 
 from main import run
@@ -160,8 +160,11 @@ class LookupCase(unittest.TestCase):
         self.excel = self.root / "result.xlsx"
         self.opens = 0
 
-    def write_addresses(self, text: str, *, encoding: str = "utf-8") -> None:
-        (self.root / "addresses.txt").write_text(text, encoding=encoding)
+    def write_addresses(self, *rows: tuple[int | str, str] | tuple[()]) -> None:
+        with contextlib.closing(Workbook()) as book:
+            for row in rows:
+                book.active.append(row)
+            book.save(self.root / "addresses.xlsx")
 
     @contextlib.contextmanager
     def open_page(self, scenarios):
