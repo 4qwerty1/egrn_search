@@ -11,6 +11,7 @@ from tempfile import NamedTemporaryFile
 from openpyxl import Workbook, load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
 from playwright.sync_api import Locator, Page, expect, sync_playwright
+from tqdm import tqdm
 
 
 ORIGIN = "https://lk.rosreestr.ru"
@@ -269,15 +270,20 @@ def run(
                 return 0
             with open_page() as page:
                 prepare_page(page, timeout_ms)
-                for index, address in enumerate(pending):
-                    if index:
+                with tqdm(
+                    total=len(pending), desc="Поиск ЕГРН", unit="адр.",
+                    file=sys.stdout, disable=None, dynamic_ncols=True,
+                ) as progress:
+                    for index, address in enumerate(pending):
+                        if index:
+                            require_session(page)
+                            pause(5)
+                        result = lookup(page, address, timeout_ms)
                         require_session(page)
-                        pause(5)
-                    result = lookup(page, address, timeout_ms)
-                    require_session(page)
-                    save_result(sheet, path, rows.get(address), address, result)
-                    if result is not None and index + 1 < len(pending):
-                        close_card(page)
+                        save_result(sheet, path, rows.get(address), address, result)
+                        progress.update()
+                        if result is not None and index + 1 < len(pending):
+                            close_card(page)
     except KeyboardInterrupt:
         return 130
     except Exception as error:
