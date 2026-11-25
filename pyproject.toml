@@ -1,0 +1,10 @@
+[project]
+name = "egrn"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Просин Андрей Александрович", email = "prosinaa@aoken.ru" }
+]
+requires-python = ">=3.13"
+dependencies = []
