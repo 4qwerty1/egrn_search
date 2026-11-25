@@ -1,10 +1,13 @@
 [project]
 name = "egrn"
 version = "0.1.0"
-description = "Add your description here"
+description = "Поиск объектов ЕГРН через Личный кабинет Росреестра"
 readme = "README.md"
 authors = [
     { name = "Просин Андрей Александрович", email = "prosinaa@aoken.ru" }
 ]
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "openpyxl",
+    "playwright>=1.51",
+]

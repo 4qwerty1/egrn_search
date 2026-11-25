@@ -9,3 +9,7 @@ wheels/
 # Virtual environments
 .venv
 .playwright-mcp/
+
+# Результаты поиска
+/result.xlsx
+/screenshots/*.png
