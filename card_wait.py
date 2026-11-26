@@ -2,6 +2,7 @@ from contextlib import ExitStack, suppress
 
 from playwright.sync_api import Error, JSHandle, Locator, Page
 
+import config
 from rosreestr import PAGE_STATE, require_session
 
 
@@ -11,8 +12,6 @@ CARD_TITLE = f"{MODAL} .realestate-object-modal__h1"
 RESULTS_CONTAINER = ".main__content.main__content_with-aside"
 SPINNER_WRAPPER = ".rros-ui-lib-spinner__wrapper"
 SPINNER = f"{RESULTS_CONTAINER} > {SPINNER_WRAPPER}"
-GRACE_MS = 1_000
-POLL_MS = 25
 
 OBSERVE_SPINNER = f"""
 () => {{
@@ -43,7 +42,7 @@ state => {{
     if (title && shown({CARD!r}).length) return {{opened: true}};
     const now = performance.now();
     state.idleSince ??= now;
-    return now - state.idleSince >= {GRACE_MS} && {{opened: false}};
+    return now - state.idleSince >= {config.CARD_GRACE_MS} && {{opened: false}};
 }}"""
 
 
@@ -61,7 +60,7 @@ def wait_for_card(page: Page, row: Locator, timeout_ms: int) -> bool:
         handles.callback(_disconnect, state)
         row.click(timeout=timeout_ms)
         ready = page.wait_for_function(
-            CARD_STATE, arg=state, polling=POLL_MS, timeout=timeout_ms + GRACE_MS,
+            CARD_STATE, arg=state, polling=config.CARD_POLL_MS, timeout=timeout_ms + config.CARD_GRACE_MS,
         )
         handles.callback(ready.dispose)
         outcome = ready.json_value()

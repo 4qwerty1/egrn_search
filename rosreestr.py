@@ -5,6 +5,8 @@ from http import HTTPStatus
 
 from playwright.sync_api import Locator, Page, sync_playwright
 
+import config
+
 
 ORIGIN = "https://lk.rosreestr.ru"
 SERVICE_PATH = "/eservices/real-estate-objects-online"
@@ -13,7 +15,6 @@ ACCOUNT = 'a[href="/my-applications"]'
 CAPTCHA = "#captcha"
 QUERY = "#query"
 SEARCH = "#realestateobjects-search"
-DEFAULT_TIMEOUT_MS = 30_000
 
 PAGE_STATE = f"""
     const visible = node => {{
@@ -41,7 +42,9 @@ def open_browser() -> Generator[Page]:
     with (
         sync_playwright() as playwright,
         closing(playwright.chromium.launch(headless=False)) as browser,
-        closing(browser.new_context(viewport={"width": 1900, "height": 930})) as context,
+        closing(browser.new_context(
+            viewport={"width": config.VIEWPORT_WIDTH, "height": config.VIEWPORT_HEIGHT},
+        )) as context,
     ):
         yield context.new_page()
 
@@ -69,7 +72,7 @@ def _prepare_search(page: Page, timeout_ms: int, *, manual_login: bool) -> None:
             "Войдите вручную в Личный кабинет Росреестра в открытом браузере, "
             "вернитесь на страницу поиска и нажмите Enter здесь: "
         )
-    page.wait_for_function(SEARCH_READY, timeout=min(timeout_ms, DEFAULT_TIMEOUT_MS)).dispose()
+    page.wait_for_function(SEARCH_READY, timeout=min(timeout_ms, config.DEFAULT_TIMEOUT_MS)).dispose()
 
 
 def reset_search(page: Page, timeout_ms: int) -> None:

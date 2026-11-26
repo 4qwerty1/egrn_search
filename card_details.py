@@ -4,13 +4,12 @@ from typing import NamedTuple
 
 from playwright.sync_api import Locator, Page
 
+import config
 from card_wait import CARD
-from rosreestr import DEFAULT_TIMEOUT_MS, require_session
+from rosreestr import require_session
 
 
 FIELD = "build-card-wrapper__info__ul__subinfo"
-CARD_ANALYSIS_DELAY_SECONDS = 0.5
-AFTER_SCREENSHOT_DELAY_SECONDS = 1
 
 
 class CardMatch(NamedTuple):
@@ -43,13 +42,13 @@ def _capture_card(page: Page, card: Locator, pause: Callable[[float], None]) -> 
     except _CardFieldError as missing:
         error = str(missing)
     require_session(page)
-    png = card.screenshot(type="png", animations="disabled", scale="css", timeout=DEFAULT_TIMEOUT_MS)
-    pause(AFTER_SCREENSHOT_DELAY_SECONDS)
+    png = card.screenshot(type="png", animations="disabled", scale="css", timeout=config.DEFAULT_TIMEOUT_MS)
+    pause(config.AFTER_SCREENSHOT_DELAY_SECONDS)
     return CardMatch(ownership, png, error)
 
 
 def read_card(page: Page, number: str, pause: Callable[[float], None]) -> CardMatch:
-    pause(CARD_ANALYSIS_DELAY_SECONDS)
+    pause(config.CARD_ANALYSIS_DELAY_SECONDS)
     card = page.locator(f"{CARD}:visible")
     general_info = card.locator('xpath=.//ul[normalize-space(../*[1]) = "Общая информация"]')
     if _field_text(general_info, "Кадастровый номер") != number:

@@ -8,12 +8,11 @@ from openpyxl import load_workbook
 from playwright.sync_api import Error, Page
 from tqdm import tqdm
 
-import card_details
+import config
 import results
 import rosreestr
 import search
 
-SEARCH_DELAY_SECONDS = 5
 EXIT_INTERRUPTED = 130
 
 
@@ -86,12 +85,12 @@ class _LookupRun:
         return 0
 
     def _run_workbook(self, root: Path) -> None:
-        addresses = _read_addresses(root / "addresses.xlsx")
-        with closing(results.load_results(root / "result.xlsx")) as book:
+        addresses = _read_addresses(root / config.ADDRESSES_FILE)
+        with closing(results.load_results(root / config.RESULTS_FILE)) as book:
             pending = _pending_addresses(book, addresses)
             if not pending:
                 return
-            error_detail = root / "error_detail"
+            error_detail = (root / config.RESULTS_FILE).with_name(config.ERROR_DETAIL_FILE)
             with self._open_page() as page:
                 try:
                     self._search_pending(page, book, pending, error_detail)
@@ -107,23 +106,23 @@ class _LookupRun:
         error_detail: Path,
     ) -> None:
         rosreestr.prepare_page(page, self._timeout_ms)
-        last_index = len(pending) - 1
         with tqdm(
             total=len(pending), desc="Поиск ЕГРН", unit="адр.",
             file=sys.stdout, disable=None, dynamic_ncols=True,
         ) as progress:
-            for index, address in enumerate(pending):
+            for index, address in enumerate(pending, start=1):
                 self._address = address
-                if index:
+                if index > 1:
                     rosreestr.require_session(page)
-                    self._pause(SEARCH_DELAY_SECONDS)
+                    self._pause(config.SEARCH_DELAY_SECONDS)
                 match = search.lookup(page, address, self._timeout_ms, pause=self._pause)
                 rosreestr.require_session(page)
-                if isinstance(match, card_details.CardMatch) and match.error is not None:
+                has_card = match is not None and not isinstance(match, search.CardOpenFailure)
+                if has_card and match.error is not None:
                     _save_error_detail(page, error_detail)
                 book.save(address, pending[address], match)
                 progress.update()
-                if isinstance(match, card_details.CardMatch) and index < last_index:
+                if has_card and index < len(pending):
                     search.close_card(page)
 
 
@@ -132,7 +131,7 @@ def run(
     *,
     open_page: Callable[[], AbstractContextManager[Page]] = rosreestr.open_browser,
     pause: Callable[[float], None] = time.sleep,
-    timeout_ms: int = rosreestr.DEFAULT_TIMEOUT_MS,
+    timeout_ms: int = config.DEFAULT_TIMEOUT_MS,
 ) -> int:
     return _LookupRun(open_page, pause, timeout_ms).execute(root)
 

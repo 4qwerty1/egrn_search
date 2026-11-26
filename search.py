@@ -4,6 +4,7 @@ from enum import StrEnum
 
 from playwright.sync_api import Locator, Page, expect
 
+import config
 from card_details import CardMatch, read_card
 from card_wait import MODAL, wait_for_card
 from rosreestr import require_session, visible_text
@@ -15,7 +16,7 @@ NO_RESULTS = "По заданным критериям поиска объект
 ACTIVE_PAGE = "button.rros-ui-lib-table-pagination__btn--number.rros-ui-lib-table-pagination__btn--active"
 NEXT_PAGE = "button.rros-ui-lib-table-pagination__btn--next"
 RESULT_COUNT_MISMATCH = "Число строк выдачи не совпадает со счётчиком результатов."
-RESULT_DELAY_SECONDS = 1
+
 
 class CardOpenFailure(StrEnum):
     EXHAUSTED = "Не получилось открыть карточку объекта"
@@ -84,12 +85,12 @@ def lookup(
         empty.first.wait_for()
         if rows.count():
             raise RuntimeError("Нулевой счётчик результатов при наличии строк выдачи.")
-        pause(RESULT_DELAY_SECONDS)
+        pause(config.RESULT_DELAY_SECONDS)
         return None
     rows.first.wait_for(timeout=timeout_ms)
     if empty.count():
         raise RuntimeError("Ненулевой счётчик результатов при сообщении об их отсутствии.")
-    pause(RESULT_DELAY_SECONDS)
+    pause(config.RESULT_DELAY_SECONDS)
     for row in _result_rows(page, rows, count, timeout_ms):
         match = _inspect_row(page, row, timeout_ms, pause)
         if match is not None:

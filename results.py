@@ -10,11 +10,12 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.cell.cell import Cell
 from openpyxl.worksheet.worksheet import Worksheet
 
+import config
+
 if TYPE_CHECKING:
     from search import LookupResult
 
 
-SHEET = "Результаты"
 HEADERS = ("Номер ЛС", "Адрес", "Успешен ли поиск", "Форма собственности", "Название файла скриншота")
 FOUND_COLUMN = 3
 SUCCESS_STATUS = "Да"
@@ -95,7 +96,7 @@ def _store_screenshot(root: Path, address: str, png: bytes) -> str:
     stem = stem.rstrip(" .") or "Адрес"
     if WINDOWS_DEVICE_NAME.match(stem):
         stem = f"_{stem}"
-    screenshots = root / "screenshots"
+    screenshots = root / config.SCREENSHOTS_DIR
     screenshots.mkdir(exist_ok=True)
     path = screenshots / f"{stem}.png"
     suffix = 0
@@ -114,7 +115,7 @@ def _validate_header(path: Path, header: SheetRow) -> None:
     overflow = header[width:]
     has_extra_cells = any(entry is not None for entry in overflow)
     if header[:width] != HEADERS or has_extra_cells:
-        raise ValueError(f"{path.name}: неверные заголовки листа «{SHEET}».")
+        raise ValueError(f"{path.name}: неверные заголовки листа «{config.RESULTS_SHEET}».")
 
 
 def _check_key(path: Path, number: int, columns: SheetRow) -> tuple[str, str]:
@@ -146,15 +147,15 @@ def load_results(path: Path) -> ResultSheet:
     if not path.exists():
         workbook = Workbook()
         sheet = cast(Worksheet, workbook.active)
-        sheet.title = SHEET
+        sheet.title = config.RESULTS_SHEET
         sheet.append(HEADERS)
         _publish(path, workbook.save)
         return ResultSheet(path, workbook, sheet, {})
 
     workbook = load_workbook(path)
-    if SHEET not in workbook:
-        raise ValueError(f"{path.name}: нет листа «{SHEET}».")
-    sheet = cast(Worksheet, workbook[SHEET])
+    if config.RESULTS_SHEET not in workbook:
+        raise ValueError(f"{path.name}: нет листа «{config.RESULTS_SHEET}».")
+    sheet = cast(Worksheet, workbook[config.RESULTS_SHEET])
     row_entries = sheet.values
     _validate_header(path, next(row_entries, ()))
     return ResultSheet(path, workbook, sheet, _index_rows(path, row_entries))

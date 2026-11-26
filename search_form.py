@@ -4,13 +4,12 @@ from contextlib import ExitStack
 
 from playwright.sync_api import ElementHandle, Locator, Page, TimeoutError, expect
 
+import config
 from rosreestr import PAGE_STATE, QUERY, SEARCH, require_session, reset_search, visible_text
 
 
 TOTAL = "span.realestateobjects-wrapper__results__total-count"
 DUPLICATE_COUNTER = "Видно несколько счётчиков результатов."
-ADDRESS_DELAY_SECONDS = 1
-SEARCH_ATTEMPTS = 3
 FRESH_COUNTER = f"""
 old => {{
     {PAGE_STATE}
@@ -34,7 +33,7 @@ def _fill_search(
         raise RuntimeError("Изменился тип поиска или заполнен вид объекта.")
 
     page.locator(f"{QUERY}:visible").fill(address)
-    pause(ADDRESS_DELAY_SECONDS)
+    pause(config.ADDRESS_DELAY_SECONDS)
     button = page.locator(f"{SEARCH}:visible")
     expect(button).to_be_enabled(timeout=timeout_ms)
     return button
@@ -78,7 +77,7 @@ def _result_count(page: Page, state: dict[str, str]) -> int:
 def submit_search(
     page: Page, address: str, timeout_ms: int, *, pause: Callable[[float], None],
 ) -> int:
-    for attempt in range(SEARCH_ATTEMPTS):
+    for attempt in range(config.SEARCH_ATTEMPTS):
         if attempt:
             reset_search(page, timeout_ms)
         button = _fill_search(page, address, timeout_ms, pause)
@@ -86,5 +85,5 @@ def submit_search(
         if state is not None:
             return _result_count(page, state)
     raise TimeoutError(
-        f"Не дождались новой выдачи за {SEARCH_ATTEMPTS} попытки (тайм-аут: {timeout_ms} мс на попытку).",
+        f"Не дождались новой выдачи за {config.SEARCH_ATTEMPTS} попытки (тайм-аут: {timeout_ms} мс на попытку).",
     )
