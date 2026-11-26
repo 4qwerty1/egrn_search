@@ -20,6 +20,7 @@ HEADERS = ("Номер ЛС", "Адрес", "Успешен ли поиск", "�
 FIRST_ADDRESS = "Первый"
 FIRST_NUMBER = "1:2:3:4"
 FIRST_ACCOUNT = "101"
+SUCCESS = "Да"
 
 
 def _replace_unless(source, destination, *, blocked):
@@ -55,9 +56,9 @@ class BrowserLookupTests(LookupCase):
         self.assertEqual(self.delays, [5])
         self.assertEqual(self.rows(), [
             HEADERS,
-            (FIRST_ACCOUNT, first, True, PRIVATE_OWNERSHIP, filename(first)),
-            ("00102", first, True, PRIVATE_OWNERSHIP, filename(first)),
-            (FIRST_ACCOUNT, second, True, "Муниципальная", filename(second)),
+            (FIRST_ACCOUNT, first, SUCCESS, PRIVATE_OWNERSHIP, filename(first)),
+            ("00102", first, SUCCESS, PRIVATE_OWNERSHIP, filename(first)),
+            (FIRST_ACCOUNT, second, SUCCESS, "Муниципальная", filename(second)),
         ])
         for address in first, second:
             png = self.decode_png(address)
@@ -73,7 +74,7 @@ class BrowserLookupTests(LookupCase):
         self.assertEqual(self.rows(), [
             HEADERS,
             (FIRST_ACCOUNT, missing, "Адрес не найден", None, None),
-            ("102", found, True, None, filename(found)),
+            ("102", found, SUCCESS, None, filename(found)),
         ])
         screenshots = self.root / SCREENSHOTS
         names = {path.name for path in screenshots.iterdir()}
@@ -94,7 +95,7 @@ class BrowserLookupTests(LookupCase):
             HEADERS,
             (FIRST_ACCOUNT, missing, message, None, filename(missing)),
             ("102", duplicate, message, None, filename(duplicate)),
-            ("103", found, True, PRIVATE_OWNERSHIP, filename(found)),
+            ("103", found, SUCCESS, PRIVATE_OWNERSHIP, filename(found)),
         ])
         self.assertEqual(
             {path.name for path in (self.root / SCREENSHOTS).iterdir()},
@@ -112,7 +113,7 @@ class BrowserLookupTests(LookupCase):
         self.assertIn("CAPTCHA", stderr)
         self.assertIn(second, stderr)
         self.assertEqual(self.activity.submissions, [first])
-        expected = (FIRST_ACCOUNT, first, True, PRIVATE_OWNERSHIP, filename(first))
+        expected = (FIRST_ACCOUNT, first, SUCCESS, PRIVATE_OWNERSHIP, filename(first))
         self.assertEqual(self.rows(), [HEADERS, expected])
 
     def test_mutated_counter_is_not_fresh(self):
@@ -124,8 +125,16 @@ class BrowserLookupTests(LookupCase):
         self.assertIn(second, stderr)
         self.assertIn("Timeout", stderr)
         self.assertEqual(self.activity.submissions, [FIRST_ADDRESS, second])
-        expected = (FIRST_ACCOUNT, FIRST_ADDRESS, True, PRIVATE_OWNERSHIP, filename(FIRST_ADDRESS))
+        expected = (FIRST_ACCOUNT, FIRST_ADDRESS, SUCCESS, PRIVATE_OWNERSHIP, filename(FIRST_ADDRESS))
         self.assertEqual(self.rows(), [HEADERS, expected])
+
+    def test_legacy_success_skips_browser_lookup(self):
+        self.write_addresses((101, FIRST_ADDRESS))
+        _write_book(self.excel, HEADERS, [(FIRST_ACCOUNT, FIRST_ADDRESS, True)])
+        original = self.excel.read_bytes()
+        self.assertEqual(self.lookup({})[0], 0)
+        self.assertEqual(self.opens, 0)
+        self.assertEqual(self.excel.read_bytes(), original)
 
 
 class WorkbookTests(LookupCase):
@@ -154,8 +163,8 @@ class WorkbookTests(LookupCase):
         self.assertEqual(self.delays, [5])
         self.assertEqual(self.rows(), [
             HEADERS,
-            (FIRST_ACCOUNT, saved, True, PRIVATE_OWNERSHIP, filename(saved)),
-            ("102", retry, True, PRIVATE_OWNERSHIP, filename(retry)),
+            (FIRST_ACCOUNT, saved, SUCCESS, PRIVATE_OWNERSHIP, filename(saved)),
+            ("102", retry, SUCCESS, PRIVATE_OWNERSHIP, filename(retry)),
             ("103", new, "Адрес не найден", None, None),
         ])
         self.assertEqual(screenshot.read_bytes(), original)

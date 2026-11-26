@@ -17,9 +17,10 @@ if TYPE_CHECKING:
 SHEET = "Результаты"
 HEADERS = ("Номер ЛС", "Адрес", "Успешен ли поиск", "Форма собственности", "Название файла скриншота")
 FOUND_COLUMN = 3
+SUCCESS_STATUS = "Да"
 
 type SheetRow = tuple[object, ...]
-type ResultFields = tuple[str, str, bool | str, str | None, str | None]
+type ResultFields = tuple[str, str, str, str | None, str | None]
 type RowIndex = dict[tuple[str, str], int]
 
 
@@ -34,17 +35,20 @@ class ResultSheet:
 
     def has_success(self, account: str, address: str) -> bool:
         row = self._rows.get((account, address))
-        return row is not None and self._sheet.cell(row, FOUND_COLUMN).value is True
+        if row is None:
+            return False
+        status = self._sheet.cell(row, FOUND_COLUMN).value
+        return status == SUCCESS_STATUS or status is True
 
     def save(
         self, address: str, accounts: list[str],
         match: "CardMatch | None",
     ) -> None:
-        found: bool | str = "Адрес не найден"
+        found = "Адрес не найден"
         ownership = None
         filename = None
         if match is not None:
-            found = match.error or True
+            found = match.error or SUCCESS_STATUS
             ownership = match.ownership
             filename = _store_screenshot(self._path.parent, address, match.png)
 
