@@ -1,82 +1,82 @@
 import re
-from collections.abc import Callable
-from typing import NamedTuple
+from collections.abc import Callable, Iterator
+from enum import StrEnum
 
-from playwright.sync_api import Locator, Page
+from playwright.sync_api import Locator, Page, expect
 
-from rosreestr import DEFAULT_TIMEOUT_MS, require_session, visible_text
+from card_details import CardMatch, read_card
+from card_wait import MODAL, wait_for_card
+from rosreestr import require_session, visible_text
 from search_form import submit_search
 
 
 RESULT_ROW = '[role="row"].rros-ui-lib-table__row'
 NO_RESULTS = "По заданным критериям поиска объекты не найдены"
-CARD = ".realestate-object-modal .build-card-wrapper.card"
-FIELD = "build-card-wrapper__info__ul__subinfo"
+ACTIVE_PAGE = "button.rros-ui-lib-table-pagination__btn--number.rros-ui-lib-table-pagination__btn--active"
+NEXT_PAGE = "button.rros-ui-lib-table-pagination__btn--next"
+RESULT_COUNT_MISMATCH = "Число строк выдачи не совпадает со счётчиком результатов."
 RESULT_DELAY_SECONDS = 1
-SCREENSHOT_DELAY_SECONDS = 0.5
-AFTER_SCREENSHOT_DELAY_SECONDS = 1
+
+class CardOpenFailure(StrEnum):
+    EXHAUSTED = "Не получилось открыть карточку объекта"
 
 
-class CardMatch(NamedTuple):
-    ownership: str | None
-    png: bytes
-    error: str | None
+type LookupResult = CardMatch | CardOpenFailure | None
 
 
-class _CardFieldError(RuntimeError):
-    """Название поля отсутствует или дублируется."""
-
-
-def _field_text(card: Locator, label: str) -> str:
-    name = card.locator(f"li.{FIELD} > span.{FIELD}__name").filter(
-        has_text=re.compile(rf"^\s*{re.escape(label)}\s*$"),
-    )
-    if name.count() != 1:
-        raise _CardFieldError(f"В карточке отсутствует или дублируется поле «{label}».")
-    options = name.locator("..").locator(f":scope > div.{FIELD}__options")
-    if options.count() != 1:
-        raise RuntimeError(f"Не найден единственный контейнер значения поля «{label}».")
-    return options.inner_text().strip()
-
-
-def _capture_card(page: Page, card: Locator, pause: Callable[[float], None]) -> CardMatch:
-    ownership = None
-    error = None
-    try:
-        ownership = _field_text(card, "Форма собственности")
-    except _CardFieldError as missing:
-        error = str(missing)
-    pause(SCREENSHOT_DELAY_SECONDS)
-    require_session(page)
-    png = card.screenshot(type="png", animations="disabled", scale="css", timeout=DEFAULT_TIMEOUT_MS)
-    pause(AFTER_SCREENSHOT_DELAY_SECONDS)
-    return CardMatch(ownership, png, error)
+def _close_incomplete_card(page: Page) -> None:
+    if not page.locator(f"{MODAL}:visible").count():
+        return
+    active = page.locator(f"{ACTIVE_PAGE}:visible")
+    previous = active.all_inner_texts()
+    close_card(page)
+    if previous and active.all_inner_texts() != previous:
+        raise RuntimeError("Страница выдачи изменилась после закрытия карточки.")
 
 
 def _inspect_row(
-    page: Page, row: Locator, empty: Locator, pause: Callable[[float], None],
-) -> CardMatch:
-    row.wait_for()
-    if empty.count():
-        raise RuntimeError("Ненулевой счётчик результатов при сообщении об их отсутствии.")
-    pause(RESULT_DELAY_SECONDS)
-    number = row.locator('[role="cell"]').first.inner_text().strip()
+    page: Page, row: Locator, timeout_ms: int, pause: Callable[[float], None],
+) -> CardMatch | None:
+    row.wait_for(timeout=timeout_ms)
+    number = row.locator('[role="cell"]').first.inner_text(timeout=timeout_ms).strip()
     if not number:
-        raise RuntimeError("В первой строке выдачи нет кадастрового номера.")
+        raise RuntimeError("В строке выдачи нет кадастрового номера.")
 
+    if wait_for_card(page, row, timeout_ms):
+        return read_card(page, number, pause)
+    _close_incomplete_card(page)
+    return None
+
+
+def _next_result_page(page: Page, page_number: int, timeout_ms: int) -> None:
     require_session(page)
-    row.click()
-    visible_text(page, "Сведения об объекте").wait_for()
-    card = page.locator(f"{CARD}:visible")
-    card.wait_for()
-    if _field_text(card, "Кадастровый номер") != number:
-        raise RuntimeError(f"Кадастровый номер карточки не совпадает с номером результата {number!r}.")
-    return _capture_card(page, card, pause)
+    next_button = page.locator(f"{NEXT_PAGE}:visible")
+    if next_button.count() != 1 or not next_button.is_enabled():
+        raise RuntimeError(RESULT_COUNT_MISMATCH)
+    next_button.click(timeout=timeout_ms)
+    active = page.locator(f"{ACTIVE_PAGE}:visible")
+    expect(active).to_have_text(str(page_number), timeout=timeout_ms)
+
+
+def _result_rows(page: Page, rows: Locator, count: int, timeout_ms: int) -> Iterator[Locator]:
+    page_number = 1
+    remaining = count
+    while remaining:
+        rows.first.wait_for(timeout=timeout_ms)
+        page_size = rows.count()
+        if not 0 < page_size <= remaining:
+            raise RuntimeError(RESULT_COUNT_MISMATCH)
+        for index in range(page_size):
+            yield rows.nth(index)
+        remaining -= page_size
+        if remaining:
+            page_number += 1
+            _next_result_page(page, page_number, timeout_ms)
 
 
 def lookup(
     page: Page, address: str, timeout_ms: int, *, pause: Callable[[float], None],
-) -> CardMatch | None:
+) -> LookupResult:
     count = submit_search(page, address, timeout_ms, pause=pause)
     rows = page.locator(f"{RESULT_ROW}:visible")
     empty = visible_text(page, NO_RESULTS)
@@ -86,7 +86,15 @@ def lookup(
             raise RuntimeError("Нулевой счётчик результатов при наличии строк выдачи.")
         pause(RESULT_DELAY_SECONDS)
         return None
-    return _inspect_row(page, rows.first, empty, pause)
+    rows.first.wait_for(timeout=timeout_ms)
+    if empty.count():
+        raise RuntimeError("Ненулевой счётчик результатов при сообщении об их отсутствии.")
+    pause(RESULT_DELAY_SECONDS)
+    for row in _result_rows(page, rows, count, timeout_ms):
+        match = _inspect_row(page, row, timeout_ms, pause)
+        if match is not None:
+            return match
+    return CardOpenFailure.EXHAUSTED
 
 
 def close_card(page: Page) -> None:
@@ -94,4 +102,4 @@ def close_card(page: Page) -> None:
         "button", name=re.compile(r"^Вернуться к результатам поиска$", re.IGNORECASE),
     )
     back.and_(page.locator(".realestate-object-modal__btn")).click()
-    page.locator(f"{CARD}:visible").wait_for(state="hidden")
+    page.locator(f"{MODAL}:visible").wait_for(state="hidden")

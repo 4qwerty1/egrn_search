@@ -21,6 +21,7 @@ FIRST_ADDRESS = "Первый"
 FIRST_NUMBER = "1:2:3:4"
 FIRST_ACCOUNT = "101"
 SUCCESS = "Да"
+SPINNER_TIME = "spinnerMs"
 
 
 def _replace_unless(source, destination, *, blocked):
@@ -162,6 +163,105 @@ class BrowserLookupTests(LookupCase):
         self.assertEqual(self.lookup({})[0], 0)
         self.assertEqual(self.opens, 0)
         self.assertEqual(self.excel.read_bytes(), original)
+
+
+class CardFallbackTests(LookupCase):
+    def test_kosmichesky_address_opens_second_card(self):
+        address = "г.Петропавловск-Камчатский проезд Космический д.19 кв.45"
+        first, second = "41:00:0000000:3260", "41:01:0010119:10832"
+        self.write_addresses((101, address))
+        code, stderr = self.lookup({
+            address: returns_objects(
+                [first, None, {SPINNER_TIME: 379, "noCard": True}],
+                [second, PRIVATE_OWNERSHIP, {SPINNER_TIME: 2_257, "cardDelayMs": 13}],
+            ),
+        })
+        self.assertEqual(code, 0, stderr)
+        self._assert_clicks(first, second)
+        self._assert_retry_delays()
+        self.assertEqual(self.activity.opened, [second])
+        self.assertEqual(self.rows(), [
+            HEADERS,
+            (FIRST_ACCOUNT, address, SUCCESS, PRIVATE_OWNERSHIP, filename(address)),
+        ])
+        self._assert_only_screenshot(filename(address))
+
+    def test_failed_rows_then_card_on_next_page(self):
+        self.write_addresses((101, FIRST_ADDRESS))
+        numbers = [FIRST_NUMBER, "41:01:1:5", "41:01:1:6", "41:01:1:7"]
+        spinner = {SPINNER_TIME: 120}
+        unavailable = {**spinner, "noCard": True}
+        scenarios = {FIRST_ADDRESS: {
+            **returns_objects(
+                [numbers[0], None, unavailable],
+                [numbers[1], None, unavailable],
+                [numbers[2], PRIVATE_OWNERSHIP, {**spinner, "cardDelayMs": 250}],
+                [numbers[3], None],
+            ),
+            "pageSize": 2,
+        }}
+        self.assertEqual(self.lookup(scenarios), (0, ""))
+        self.assertEqual(self.activity.submissions, [FIRST_ADDRESS])
+        self._assert_clicks(*numbers[:3])
+        self.assertEqual(self.activity.opened, [numbers[2]])
+        self._assert_retry_delays()
+        saved = filename(FIRST_ADDRESS)
+        self.assertEqual(self.rows(), [
+            HEADERS,
+            (FIRST_ACCOUNT, FIRST_ADDRESS, SUCCESS, PRIVATE_OWNERSHIP, saved),
+        ])
+        self._assert_only_screenshot(saved)
+        self.assertEqual(self.decode_png(saved)[:2], [320, 180])
+
+    def test_exhausted_results_saved_for_each_account(self):
+        found = "Следующий адрес"
+        self.write_addresses((101, FIRST_ADDRESS), (202, FIRST_ADDRESS), (203, found))
+        unavailable = {SPINNER_TIME: 30, "noCard": True}
+        code, stderr = self.lookup({
+            FIRST_ADDRESS: returns_objects(
+                [FIRST_NUMBER, None, unavailable],
+                ["41:02:1:5", None, unavailable],
+            ),
+            found: positive("41:02:1:6"),
+        })
+        self.assertEqual(code, 0, stderr)
+        self.assertEqual(self.activity.submissions, [FIRST_ADDRESS, found])
+        self._assert_clicks(FIRST_NUMBER, "41:02:1:5", "41:02:1:6")
+        status = "Не получилось открыть карточку объекта"
+        self.assertEqual(self.rows(), [
+            HEADERS,
+            (FIRST_ACCOUNT, FIRST_ADDRESS, status, None, None),
+            ("202", FIRST_ADDRESS, status, None, None),
+            ("203", found, SUCCESS, PRIVATE_OWNERSHIP, filename(found)),
+        ])
+        self._assert_only_screenshot(filename(found))
+
+    def test_stuck_spinner_does_not_retry(self):
+        self.write_addresses((101, FIRST_ADDRESS))
+        code, stderr = self.lookup({
+            FIRST_ADDRESS: returns_objects(
+                [FIRST_NUMBER, None, {SPINNER_TIME: None}],
+                ["41:03:1:5", PRIVATE_OWNERSHIP],
+            ),
+        }, timeout_ms=1_000)
+        self.assertEqual(code, 1)
+        self.assertIn("Timeout", stderr)
+        self._assert_clicks(FIRST_NUMBER)
+        self.assertEqual(self.rows(), [HEADERS])
+
+    def _assert_clicks(self, *numbers: str) -> None:
+        actual = [click["number"] for click in self.activity.clicks]
+        self.assertEqual(actual, list(numbers))
+
+    def _assert_retry_delays(self) -> None:
+        retries = self.activity.clicks[1:]
+        stops = self.activity.spinner_stops[:len(retries)]
+        for stop, retry in zip(stops, retries, strict=True):
+            self.assertGreaterEqual(retry["at"] - stop["at"], 1_000)
+
+    def _assert_only_screenshot(self, saved: str) -> None:
+        directory = self.root.joinpath(SCREENSHOTS)
+        self.assertEqual([path.name for path in directory.iterdir()], [saved])
 
 
 class WorkbookTests(LookupCase):

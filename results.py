@@ -11,7 +11,7 @@ from openpyxl.cell.cell import Cell
 from openpyxl.worksheet.worksheet import Worksheet
 
 if TYPE_CHECKING:
-    from search import CardMatch
+    from search import LookupResult
 
 
 SHEET = "Результаты"
@@ -46,12 +46,14 @@ class ResultSheet:
 
     def save(
         self, address: str, accounts: list[str],
-        match: "CardMatch | None",
+        match: "LookupResult",
     ) -> None:
         found = "Адрес не найден"
         ownership = None
         filename = None
-        if match is not None:
+        if isinstance(match, str):
+            found = str(match)
+        elif match is not None:
             found = match.error or SUCCESS_STATUS
             ownership = match.ownership
             filename = _store_screenshot(self._path.parent, address, match.png)

@@ -8,6 +8,7 @@ from openpyxl import load_workbook
 from playwright.sync_api import Page
 from tqdm import tqdm
 
+import card_details
 import results
 import rosreestr
 import search
@@ -103,7 +104,7 @@ class _LookupRun:
                 rosreestr.require_session(page)
                 book.save(address, pending[address], match)
                 progress.update()
-                if match is not None and index < last_index:
+                if isinstance(match, card_details.CardMatch) and index < last_index:
                     search.close_card(page)
 
 

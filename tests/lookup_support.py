@@ -5,7 +5,7 @@ import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import NamedTuple
+from typing import NamedTuple, TypedDict
 
 from openpyxl import Workbook, load_workbook
 from playwright import sync_api
@@ -21,7 +21,8 @@ DOCUMENT = """<!doctype html>
 <meta charset="utf-8">
 <style>
     body { line-height: 24px; }
-    h2 { margin: 0; line-height: 32px; }
+    h1 { margin: 0; line-height: 32px; }
+    .rros-ui-lib-spinner__loader { width: 24px; height: 24px; }
     ul { margin: 0; }
     .realestate-object-modal { background: #ddd; padding: 8px; }
     .build-card-wrapper.card { width: 320px; height: 180px; background: rgb(248, 248, 248); }
@@ -32,12 +33,17 @@ DOCUMENT = """<!doctype html>
 <div>Выберите значение из справочника</div>
 <label>Адрес или кадастровый номер <input id="query"></label>
 <button type="button" id="realestateobjects-search" disabled>Найти</button>
-<div id="results"></div>
-<div id="details"></div>
+<div class="main__content main__content_with-aside">
+    <div id="results"></div>
+    <div id="details"></div>
+</div>
 <script>
 const scenarios = __SCENARIOS__;
 window.submissions = [];
 window.opened = [];
+window.clicks = [];
+window.spinnerStops = [];
+const content = document.querySelector('.main__content');
 const query = document.querySelector('#query');
 const search = document.querySelector('#realestateobjects-search');
 const results = document.querySelector('#results');
@@ -52,7 +58,7 @@ function showCard(number, ownership, captcha) {
     window.opened.push(number);
     details.innerHTML = `
         <section class="realestate-object-modal">
-            <h2>Сведения об объекте</h2>
+            <h1 class="realestate-object-modal__h1">Сведения об объекте</h1>
             <div class="build-card-wrapper card"><ul></ul></div>
             <button class="realestate-object-modal__btn">ВЕРНУТЬСЯ К РЕЗУЛЬТАТАМ ПОИСКА</button>
         </section>`;
@@ -76,28 +82,73 @@ function showCard(number, ownership, captcha) {
     });
 }
 
-function publishResults(objects, captcha) {
-    const counter = document.createElement('span');
-    counter.className = counterClass;
-    counter.textContent = `Найдено результатов: ${objects.length}`;
-    results.replaceChildren(counter);
-    if (!objects.length) {
-        const message = document.createElement('p');
-        message.textContent = noResults;
-        results.append(message);
+function selectRow(number, ownership, options, captcha) {
+    window.clicks.push({number, at: performance.now()});
+    const finish = () => {
+        if (options.noCard) return;
+        if (options.cardDelayMs) {
+            setTimeout(() => showCard(number, ownership, captcha), options.cardDelayMs);
+        } else {
+            showCard(number, ownership, captcha);
+        }
+    };
+    if (options.spinnerMs === undefined) {
+        finish();
         return;
     }
-    results.insertAdjacentHTML('beforeend', `
+    const spinner = document.createElement('div');
+    spinner.className = 'rros-ui-lib-spinner__wrapper';
+    spinner.innerHTML = '<div class="rros-ui-lib-spinner__loader"></div>';
+    content.append(spinner);
+    if (options.spinnerMs !== null) {
+        setTimeout(() => {
+            spinner.remove();
+            window.spinnerStops.push({number, at: performance.now()});
+            finish();
+        }, options.spinnerMs);
+    }
+}
+
+function renderPage(table, {objects, captchaAfterClose, pageSize = objects.length}, index) {
+    table.innerHTML = `
         <div role="row" class="rros-ui-lib-table__head-row"><div role="cell">Кадастровый номер</div></div>
-        <div role="row" class="rros-ui-lib-table__row" hidden><div role="cell">Скрытая строка</div></div>`);
-    for (const [number, ownership] of objects) {
+        <div role="row" class="rros-ui-lib-table__row" hidden><div role="cell">Скрытая строка</div></div>`;
+    const start = index * pageSize;
+    for (const [number, ownership, options = {}] of objects.slice(start, start + pageSize)) {
         const row = document.createElement('div');
         row.setAttribute('role', 'row');
         row.className = 'rros-ui-lib-table__row';
         row.innerHTML = '<div role="cell"></div><div role="cell">Адрес объекта</div>';
         row.firstElementChild.textContent = number;
-        row.addEventListener('click', () => showCard(number, ownership, captcha));
-        results.append(row);
+        row.addEventListener('click', () => selectRow(number, ownership, options, captchaAfterClose));
+        table.append(row);
+    }
+    if (pageSize < objects.length) {
+        table.insertAdjacentHTML('beforeend', `
+            <button class="rros-ui-lib-table-pagination__btn--number
+                           rros-ui-lib-table-pagination__btn--active">${index + 1}</button>
+            <button class="rros-ui-lib-table-pagination__btn--next">Следующая</button>`);
+        const next = table.lastElementChild;
+        next.disabled = start + pageSize >= objects.length;
+        next.addEventListener('click', () => {
+            renderPage(table, {objects, captchaAfterClose, pageSize}, index + 1);
+        });
+    }
+}
+
+function publishResults(scenario) {
+    const counter = document.createElement('span');
+    counter.className = counterClass;
+    counter.textContent = `Найдено результатов: ${scenario.objects.length}`;
+    results.replaceChildren(counter);
+    if (scenario.objects.length) {
+        const table = document.createElement('div');
+        results.append(table);
+        renderPage(table, scenario, 0);
+    } else {
+        const message = document.createElement('p');
+        message.textContent = noResults;
+        results.append(message);
     }
 }
 
@@ -115,7 +166,7 @@ search.addEventListener('click', () => {
             results.replaceChildren(old, document.createElement('p'));
             results.lastElementChild.textContent = noResults;
         } else {
-            publishResults(scenario.objects, scenario.captchaAfterClose);
+            publishResults(scenario);
         }
     }, 150);
 });
@@ -143,9 +194,16 @@ def _intercept(route: sync_api.Route, *, html: str) -> None:
         route.abort()
 
 
+class TimedEvent(TypedDict):
+    number: str
+    at: float
+
+
 class SearchActivity(NamedTuple):
     submissions: list[str]
     opened: list[str]
+    clicks: list[TimedEvent]
+    spinner_stops: list[TimedEvent]
 
 
 class LookupCase(unittest.TestCase):
@@ -177,7 +235,7 @@ class LookupCase(unittest.TestCase):
             try:
                 yield page
             finally:
-                activity = page.evaluate("[window.submissions, window.opened]")
+                activity = page.evaluate("[window.submissions, window.opened, window.clicks, window.spinnerStops]")
                 self.activity = SearchActivity(*activity)
 
     def lookup(self, scenarios, *, timeout_ms=3_000):
