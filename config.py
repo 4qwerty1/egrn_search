@@ -10,10 +10,10 @@ VIEWPORT_WIDTH = 1900
 VIEWPORT_HEIGHT = 930
 
 # Паузы в секундах. Дробные значения допустимы.
-SEARCH_DELAY_SECONDS = 5  # Между поисками разных адресов.
+SEARCH_DELAY_SECONDS = 4  # Между поисками разных адресов.
 ADDRESS_DELAY_SECONDS = 1  # После заполнения адреса, перед нажатием на кнопку поиска.
 RESULT_DELAY_SECONDS = 1  # После появления выдачи, в том числе пустой.
-CARD_ANALYSIS_DELAY_SECONDS = 0.5  # Перед чтением открывшейся карточки.
+CARD_ANALYSIS_DELAY_SECONDS = 1.5  # Перед чтением открывшейся карточки.
 AFTER_SCREENSHOT_DELAY_SECONDS = 1  # После снимка карточки, в том числе последнего.
 
 # Тайм-ауты и интервалы Playwright в миллисекундах.
