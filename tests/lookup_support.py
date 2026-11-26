@@ -55,24 +55,34 @@ const infoClass = 'build-card-wrapper__info__ul__subinfo';
 
 query.addEventListener('input', () => { search.disabled = !query.value; });
 
-function showCard(number, ownership, captcha) {
-    window.opened.push(number);
-    details.innerHTML = `
-        <section class="realestate-object-modal">
-            <h1 class="realestate-object-modal__h1">Сведения об объекте</h1>
-            <div class="build-card-wrapper card"><ul></ul></div>
-            <button class="realestate-object-modal__btn">ВЕРНУТЬСЯ К РЕЗУЛЬТАТАМ ПОИСКА</button>
-        </section>`;
-    const values = Array.isArray(ownership) ? ownership : [ownership];
-    const fields = [['Кадастровый номер', number], ...values.map(value => ['Форма собственности', value])];
+function cardSection(title, fields) {
+    const section = document.createElement('div');
+    section.innerHTML = '<div></div><ul></ul>';
+    section.firstElementChild.textContent = title;
+    const list = section.lastElementChild;
     for (const [label, value] of fields) {
         const row = document.createElement('li');
         row.className = infoClass;
         row.innerHTML = `<span class="${infoClass}__name"></span><div class="${infoClass}__options"></div>`;
         row.firstElementChild.textContent = label;
         row.lastElementChild.textContent = value;
-        details.querySelector('ul').append(row);
+        list.append(row);
     }
+    return section;
+}
+
+
+function showCard(number, ownership, captcha) {
+    window.opened.push(number);
+    details.innerHTML = `
+        <section class="realestate-object-modal">
+            <h1 class="realestate-object-modal__h1">Сведения об объекте</h1>
+            <div class="build-card-wrapper card"></div>
+            <button class="realestate-object-modal__btn">ВЕРНУТЬСЯ К РЕЗУЛЬТАТАМ ПОИСКА</button>
+        </section>`;
+    const values = Array.isArray(ownership) ? ownership : [ownership];
+    const fields = [['Кадастровый номер', number], ...values.map(value => ['Форма собственности', value])];
+    details.querySelector('.card').append(cardSection('Общая информация', fields));
     details.querySelector('button').addEventListener('click', () => {
         details.replaceChildren();
         if (captcha) {

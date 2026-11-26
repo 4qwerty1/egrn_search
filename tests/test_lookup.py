@@ -67,6 +67,25 @@ class CardReadTests(LookupCase):
             card = read_card(page, FIRST_NUMBER, partial(_publish_card_fields, page, fields))
         self.assertEqual((card.ownership, card.error), (PRIVATE_OWNERSHIP, None))
 
+    def test_number_from_general_information(self):
+        previous = "1:2:3:5"
+        delays = []
+        with self.open_page({}) as page:
+            page.goto(URL)
+            page.evaluate(
+                """([current, previous, ownership]) => {
+                    showCard(current, ownership, false);
+                    details.querySelector('.card').prepend(
+                        cardSection('Ранее присвоенные номера', [['Кадастровый номер', previous]]),
+                    );
+                }""",
+                [FIRST_NUMBER, previous, PRIVATE_OWNERSHIP],
+            )
+            card = read_card(page, FIRST_NUMBER, delays.append)
+            with self.assertRaisesRegex(RuntimeError, "Кадастровый номер карточки не совпадает"):
+                read_card(page, previous, delays.append)
+        self.assertEqual((card.ownership, card.error), (PRIVATE_OWNERSHIP, None))
+
 
 class BrowserLookupTests(LookupCase):
     def test_first_visible_row_and_fresh_counter(self):

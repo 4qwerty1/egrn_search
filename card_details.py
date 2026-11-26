@@ -51,6 +51,7 @@ def _capture_card(page: Page, card: Locator, pause: Callable[[float], None]) -> 
 def read_card(page: Page, number: str, pause: Callable[[float], None]) -> CardMatch:
     pause(CARD_ANALYSIS_DELAY_SECONDS)
     card = page.locator(f"{CARD}:visible")
-    if _field_text(card, "Кадастровый номер") != number:
+    general_info = card.locator('xpath=.//ul[normalize-space(../*[1]) = "Общая информация"]')
+    if _field_text(general_info, "Кадастровый номер") != number:
         raise RuntimeError(f"Кадастровый номер карточки не совпадает с номером результата {number!r}.")
     return _capture_card(page, card, pause)
