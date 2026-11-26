@@ -40,7 +40,7 @@ DOCUMENT = """<!doctype html>
 </div>
 <script>
 const scenarios = __SCENARIOS__;
-window.submissions = [];
+window.submissions = JSON.parse(sessionStorage.getItem('submissions') || '[]');
 window.opened = [];
 window.clicks = [];
 window.spinnerStops = [];
@@ -167,15 +167,17 @@ search.addEventListener('click', () => {
     if (details.firstElementChild) return;
     const address = query.value;
     window.submissions.push(address);
+    sessionStorage.setItem('submissions', JSON.stringify(window.submissions));
     const scenario = scenarios[address];
     if (!scenario) return;
     // Пока запрос выполняется, видны предыдущие счётчик и строки.
     setTimeout(() => {
-        if (scenario.reuseCounter) {
-            const old = results.querySelector('.' + counterClass);
-            old.textContent = 'Найдено результатов: 0';
-            results.replaceChildren(old, document.createElement('p'));
-            results.lastElementChild.textContent = noResults;
+        const old = results.querySelector('.' + counterClass);
+        if (scenario.reuseCounter && old) {
+            old.textContent = `Найдено результатов: ${scenario.objects.length}`;
+            const table = document.createElement('div');
+            results.replaceChildren(old, table);
+            renderPage(table, scenario, 0);
         } else {
             publishResults(scenario);
         }

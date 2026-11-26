@@ -195,17 +195,21 @@ class BrowserLookupTests(LookupCase):
             (FIRST_ACCOUNT, FIRST_ADDRESS, SUCCESS, PRIVATE_OWNERSHIP, filename(FIRST_ADDRESS)),
         ])
 
-    def test_mutated_counter_is_not_fresh(self):
-        second = "Без нового счётчика"
-        self.write_addresses((101, FIRST_ADDRESS), (102, second))
-        scenarios = {FIRST_ADDRESS: positive(FIRST_NUMBER), second: {"reuseCounter": True}}
-        code, stderr = self.lookup(scenarios, timeout_ms=1000)
-        self.assertEqual(code, 1)
-        self.assertIn(second, stderr)
-        self.assertIn("Timeout", stderr)
-        self.assertEqual(self.activity.submissions, [FIRST_ADDRESS, second])
-        expected = (FIRST_ACCOUNT, FIRST_ADDRESS, SUCCESS, PRIVATE_OWNERSHIP, filename(FIRST_ADDRESS))
-        self.assertEqual(self.rows(), [HEADERS, expected])
+    def test_reused_counter_retries_on_clean_page(self):
+        account, second, number = "104", "Второй", "1:2:3:7"
+        self.write_addresses((FIRST_ACCOUNT, FIRST_ADDRESS), (account, second))
+        status, stderr = self.lookup({
+            FIRST_ADDRESS: positive(FIRST_NUMBER),
+            second: {**positive(number), "reuseCounter": True},
+        }, timeout_ms=1_000)
+        self.assertEqual(status, 0, stderr)
+        self.assertEqual(self.activity.submissions, [FIRST_ADDRESS, second, second])
+        self.assertEqual(self.activity.opened, [number])
+        self.assertEqual(self.rows(), [
+            HEADERS,
+            (FIRST_ACCOUNT, FIRST_ADDRESS, SUCCESS, PRIVATE_OWNERSHIP, filename(FIRST_ADDRESS)),
+            (account, second, SUCCESS, PRIVATE_OWNERSHIP, filename(second)),
+        ])
 
     def test_legacy_statuses_skip_browser_lookup(self):
         missing = "Неизвестный адрес"
@@ -320,6 +324,17 @@ class CardFallbackTests(LookupCase):
 
 
 class WorkbookTests(LookupCase):
+    def test_search_stops_after_three_timeouts(self):
+        second, third = "Без выдачи", "Следующий"
+        self.write_addresses((FIRST_ACCOUNT, FIRST_ADDRESS), (102, second), (103, third))
+        status, stderr = self.lookup({FIRST_ADDRESS: positive(FIRST_NUMBER)}, timeout_ms=1_000)
+        self.assertEqual(status, 1)
+        self.assertIn(second, stderr)
+        self.assertIn("Не дождались новой выдачи за 3 попытки", stderr)
+        self.assertEqual(self.activity.submissions, [FIRST_ADDRESS, second, second, second])
+        expected = (FIRST_ACCOUNT, FIRST_ADDRESS, SUCCESS, PRIVATE_OWNERSHIP, filename(FIRST_ADDRESS))
+        self.assertEqual(self.rows(), [HEADERS, expected])
+
     def test_resume_skips_saved_results_and_appends(self):
         saved, missing, new = "Уже сохранён", "Неизвестный адрес", "Новый адрес"
         self.write_addresses((101, saved), (102, missing))

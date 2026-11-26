@@ -2,14 +2,15 @@ import re
 from collections.abc import Callable
 from contextlib import ExitStack
 
-from playwright.sync_api import ElementHandle, Locator, Page, expect
+from playwright.sync_api import ElementHandle, Locator, Page, TimeoutError, expect
 
-from rosreestr import PAGE_STATE, QUERY, SEARCH, require_session, visible_text
+from rosreestr import PAGE_STATE, QUERY, SEARCH, require_session, reset_search, visible_text
 
 
 TOTAL = "span.realestateobjects-wrapper__results__total-count"
 DUPLICATE_COUNTER = "Видно несколько счётчиков результатов."
 ADDRESS_DELAY_SECONDS = 1
+SEARCH_ATTEMPTS = 3
 FRESH_COUNTER = f"""
 old => {{
     {PAGE_STATE}
@@ -47,14 +48,17 @@ def _previous_counter(page: Page) -> ElementHandle | None:
     return counters.element_handle() if counter_count else None
 
 
-def _search_state(page: Page, button: Locator, timeout_ms: int) -> dict[str, str]:
+def _search_state(page: Page, button: Locator, timeout_ms: int) -> dict[str, str] | None:
     with ExitStack() as handles:
         old = _previous_counter(page)
         if old is not None:
             handles.callback(old.dispose)
         require_session(page)
         button.click()
-        fresh = page.wait_for_function(FRESH_COUNTER, arg=old, timeout=timeout_ms)
+        try:
+            fresh = page.wait_for_function(FRESH_COUNTER, arg=old, timeout=timeout_ms)
+        except TimeoutError:
+            return None
         handles.callback(fresh.dispose)
         return fresh.json_value()
 
@@ -74,6 +78,13 @@ def _result_count(page: Page, state: dict[str, str]) -> int:
 def submit_search(
     page: Page, address: str, timeout_ms: int, *, pause: Callable[[float], None],
 ) -> int:
-    button = _fill_search(page, address, timeout_ms, pause)
-    state = _search_state(page, button, timeout_ms)
-    return _result_count(page, state)
+    for attempt in range(SEARCH_ATTEMPTS):
+        if attempt:
+            reset_search(page, timeout_ms)
+        button = _fill_search(page, address, timeout_ms, pause)
+        state = _search_state(page, button, timeout_ms)
+        if state is not None:
+            return _result_count(page, state)
+    raise TimeoutError(
+        f"Не дождались новой выдачи за {SEARCH_ATTEMPTS} попытки (тайм-аут: {timeout_ms} мс на попытку).",
+    )

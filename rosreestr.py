@@ -58,19 +58,28 @@ def _has_login(page: Page) -> bool:
     return not page.locator(f"{CAPTCHA}:visible").count()
 
 
-def prepare_page(page: Page, timeout_ms: int) -> None:
-    page.set_default_timeout(timeout_ms)
+def _prepare_search(page: Page, timeout_ms: int, *, manual_login: bool) -> None:
     response = page.goto(SERVICE_URL, wait_until="domcontentloaded")
     if response is None or response.status >= HTTPStatus.BAD_REQUEST:
         status = "нет ответа" if response is None else f"HTTP {response.status}"
         raise RuntimeError(f"Не удалось открыть страницу поиска Росреестра: {status}.")
 
-    if not _has_login(page):
+    if manual_login and not _has_login(page):
         builtins.input(
             "Войдите вручную в Личный кабинет Росреестра в открытом браузере, "
             "вернитесь на страницу поиска и нажмите Enter здесь: "
         )
     page.wait_for_function(SEARCH_READY, timeout=min(timeout_ms, DEFAULT_TIMEOUT_MS)).dispose()
+
+
+def reset_search(page: Page, timeout_ms: int) -> None:
+    require_session(page)
+    _prepare_search(page, timeout_ms, manual_login=False)
+
+
+def prepare_page(page: Page, timeout_ms: int) -> None:
+    page.set_default_timeout(timeout_ms)
+    _prepare_search(page, timeout_ms, manual_login=True)
 
 
 def visible_text(page: Page, text: str) -> Locator:
