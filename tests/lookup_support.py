@@ -30,10 +30,12 @@ DOCUMENT = """<!doctype html>
 </style>
 <a href="/my-applications" hidden>Мои заявки</a>
 <a href="/my-applications">Мои заявки</a>
+<div id="search-form">
 <div>Поиск по адресу и кадастровому номеру</div>
-<div>Выберите значение из справочника</div>
+<div id="object-type-hint">Выберите значение из справочника</div>
 <label>Адрес или кадастровый номер <input id="query"></label>
 <button type="button" id="realestateobjects-search" disabled>Найти</button>
+</div>
 <div class="main__content main__content_with-aside">
     <div id="results"></div>
     <div id="details"></div>
@@ -46,12 +48,18 @@ window.clicks = [];
 window.spinnerStops = [];
 const content = document.querySelector('.main__content');
 const query = document.querySelector('#query');
+const searchForm = document.querySelector('#search-form');
 const search = document.querySelector('#realestateobjects-search');
 const results = document.querySelector('#results');
 const details = document.querySelector('#details');
 const counterClass = 'realestateobjects-wrapper__results__total-count';
 const noResults = 'По заданным критериям поиска объекты не найдены';
 const infoClass = 'build-card-wrapper__info__ul__subinfo';
+
+if (sessionStorage.getItem('hideFormOnReload')) {
+    sessionStorage.removeItem('hideFormOnReload');
+    searchForm.hidden = true;
+}
 
 query.addEventListener('input', () => { search.disabled = !query.value; });
 
@@ -152,6 +160,9 @@ function publishResults(scenario) {
     counter.className = counterClass;
     counter.textContent = `Найдено результатов: ${scenario.objects.length}`;
     results.replaceChildren(counter);
+    if (scenario.hideSearchForm) searchForm.hidden = true;
+    if (scenario.hideObjectTypeHint) document.querySelector('#object-type-hint').hidden = true;
+    if (scenario.hideSearchFormOnReload) sessionStorage.setItem('hideFormOnReload', 'true');
     if (scenario.objects.length) {
         const table = document.createElement('div');
         results.append(table);

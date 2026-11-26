@@ -22,17 +22,35 @@ old => {{
 }}"""
 
 
-def _fill_search(
-    page: Page, address: str, timeout_ms: int, pause: Callable[[float], None],
-) -> Locator:
+def _search_query(page: Page, timeout_ms: int, *, retry: bool) -> Locator | None:
+    query = page.locator(f"{QUERY}:visible")
+    if retry:
+        try:
+            reset_search(page, timeout_ms)
+        except TimeoutError:
+            require_session(page)
+            if query.count():
+                raise
+            return None
+
     require_session(page)
+    return query if query.count() else None
+
+
+def _prepare_attempt(
+    page: Page, address: str, timeout_ms: int,
+    pause: Callable[[float], None], *, retry: bool,
+) -> Locator | None:
+    query = _search_query(page, timeout_ms, retry=retry)
+    if query is None:
+        return None
     if not (
         visible_text(page, "Поиск по адресу и кадастровому номеру").count()
         and visible_text(page, "Выберите значение из справочника").count()
     ):
-        raise RuntimeError("Изменился тип поиска или заполнен вид объекта.")
+        return None
 
-    page.locator(f"{QUERY}:visible").fill(address)
+    query.fill(address)
     pause(config.ADDRESS_DELAY_SECONDS)
     button = page.locator(f"{SEARCH}:visible")
     expect(button).to_be_enabled(timeout=timeout_ms)
@@ -77,13 +95,16 @@ def _result_count(page: Page, state: dict[str, str]) -> int:
 def submit_search(
     page: Page, address: str, timeout_ms: int, *, pause: Callable[[float], None],
 ) -> int:
+    button = None
     for attempt in range(config.SEARCH_ATTEMPTS):
-        if attempt:
-            reset_search(page, timeout_ms)
-        button = _fill_search(page, address, timeout_ms, pause)
+        button = _prepare_attempt(page, address, timeout_ms, pause, retry=attempt > 0)
+        if button is None:
+            continue
         state = _search_state(page, button, timeout_ms)
         if state is not None:
             return _result_count(page, state)
+    if button is None:
+        raise RuntimeError(f"Форма поиска недоступна или изменилась после {config.SEARCH_ATTEMPTS} попыток.")
     raise TimeoutError(
         f"Не дождались новой выдачи за {config.SEARCH_ATTEMPTS} попытки (тайм-аут: {timeout_ms} мс на попытку).",
     )
