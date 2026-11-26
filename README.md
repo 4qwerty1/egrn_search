@@ -7,7 +7,7 @@
 ```sh
 uv sync
 uv run playwright install chromium
-uv run python -m egrn
+uv run -m egrn
 ```
 
 Имена файлов и листа результатов, размер области Chromium, паузы, тайм-ауты и число попыток поиска настраиваются в [`egrn/config.py`](egrn/config.py). Паузы задаются в секундах, тайм-ауты и интервал проверки карточки — в миллисекундах. Изменения вступают в силу при следующем запуске. Ниже описаны значения по умолчанию.
@@ -46,5 +46,5 @@ uv run flake8 .
 Автономная проверка без обращения к Росреестру:
 
 ```sh
-uv run python -m unittest discover -s tests
+uv run -m unittest discover -s tests
 ```
