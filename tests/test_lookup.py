@@ -5,10 +5,12 @@ from unittest.mock import patch
 
 from openpyxl import Workbook
 
+from card_details import read_card
 from lookup_support import (
     PRIVATE_OWNERSHIP,
     SCREENSHOTS,
     SHEET,
+    URL,
     LookupCase,
     filename,
     positive,
@@ -38,6 +40,29 @@ def _write_book(path, header, body):
         for row in body:
             sheet.append(row)
         workbook.save(path)
+
+
+def _publish_card_fields(page, fields, seconds):
+    if seconds < 1:
+        page.evaluate("(fields) => { details.querySelector('ul').innerHTML = fields; }", fields)
+
+
+class CardReadTests(LookupCase):
+    def test_card_fields_can_appear_during_pause(self):
+        with self.open_page({}) as page:
+            page.goto(URL)
+            fields = page.evaluate(
+                """([number, ownership]) => {
+                    showCard(number, ownership, false);
+                    const list = details.querySelector('ul');
+                    const fields = list.innerHTML;
+                    list.replaceChildren();
+                    return fields;
+                }""",
+                [FIRST_NUMBER, PRIVATE_OWNERSHIP],
+            )
+            card = read_card(page, FIRST_NUMBER, partial(_publish_card_fields, page, fields))
+        self.assertEqual((card.ownership, card.error), (PRIVATE_OWNERSHIP, None))
 
 
 class BrowserLookupTests(LookupCase):

@@ -9,7 +9,7 @@ from rosreestr import DEFAULT_TIMEOUT_MS, require_session
 
 
 FIELD = "build-card-wrapper__info__ul__subinfo"
-SCREENSHOT_DELAY_SECONDS = 0.5
+CARD_ANALYSIS_DELAY_SECONDS = 0.5
 AFTER_SCREENSHOT_DELAY_SECONDS = 1
 
 
@@ -42,7 +42,6 @@ def _capture_card(page: Page, card: Locator, pause: Callable[[float], None]) -> 
         ownership = _field_text(card, "Форма собственности")
     except _CardFieldError as missing:
         error = str(missing)
-    pause(SCREENSHOT_DELAY_SECONDS)
     require_session(page)
     png = card.screenshot(type="png", animations="disabled", scale="css", timeout=DEFAULT_TIMEOUT_MS)
     pause(AFTER_SCREENSHOT_DELAY_SECONDS)
@@ -50,6 +49,7 @@ def _capture_card(page: Page, card: Locator, pause: Callable[[float], None]) -> 
 
 
 def read_card(page: Page, number: str, pause: Callable[[float], None]) -> CardMatch:
+    pause(CARD_ANALYSIS_DELAY_SECONDS)
     card = page.locator(f"{CARD}:visible")
     if _field_text(card, "Кадастровый номер") != number:
         raise RuntimeError(f"Кадастровый номер карточки не совпадает с номером результата {number!r}.")
