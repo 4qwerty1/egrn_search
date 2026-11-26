@@ -10,7 +10,7 @@ from typing import NamedTuple, TypedDict
 from openpyxl import Workbook, load_workbook
 from playwright import sync_api
 
-from main import run
+from egrn.main import run
 
 
 URL = "https://lk.rosreestr.ru/eservices/real-estate-objects-online"

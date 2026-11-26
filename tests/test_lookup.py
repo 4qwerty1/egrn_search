@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from openpyxl import Workbook
 
-from card_details import read_card
+from egrn.card_details import read_card
 from lookup_support import (
     PRIVATE_OWNERSHIP,
     SCREENSHOTS,
@@ -386,7 +386,7 @@ class WorkbookTests(LookupCase):
         original = self._save_empty_book()
         self.write_addresses((101, FIRST_ADDRESS))
         with patch(
-            "results.os.replace",
+            "egrn.results.os.replace",
             side_effect=partial(_replace_unless, blocked=self.excel),
         ):
             code, stderr = self.lookup({FIRST_ADDRESS: positive(FIRST_NUMBER)})

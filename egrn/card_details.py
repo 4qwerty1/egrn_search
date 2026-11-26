@@ -4,9 +4,9 @@ from typing import NamedTuple
 
 from playwright.sync_api import Locator, Page
 
-import config
-from card_wait import CARD
-from rosreestr import require_session
+from egrn import config
+from egrn.card_wait import CARD
+from egrn.rosreestr import require_session
 
 
 FIELD = "build-card-wrapper__info__ul__subinfo"

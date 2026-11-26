@@ -2,8 +2,8 @@ from contextlib import ExitStack, suppress
 
 from playwright.sync_api import Error, JSHandle, Locator, Page
 
-import config
-from rosreestr import PAGE_STATE, require_session
+from egrn import config
+from egrn.rosreestr import PAGE_STATE, require_session
 
 
 MODAL = ".realestate-object-modal"

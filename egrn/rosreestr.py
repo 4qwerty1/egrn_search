@@ -5,7 +5,7 @@ from http import HTTPStatus
 
 from playwright.sync_api import Locator, Page, sync_playwright
 
-import config
+from egrn import config
 
 
 ORIGIN = "https://lk.rosreestr.ru"

@@ -4,8 +4,8 @@ from contextlib import ExitStack
 
 from playwright.sync_api import ElementHandle, Locator, Page, TimeoutError, expect
 
-import config
-from rosreestr import PAGE_STATE, QUERY, SEARCH, require_session, reset_search, visible_text
+from egrn import config
+from egrn.rosreestr import PAGE_STATE, QUERY, SEARCH, require_session, reset_search, visible_text
 
 
 TOTAL = "span.realestateobjects-wrapper__results__total-count"

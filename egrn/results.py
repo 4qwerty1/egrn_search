@@ -10,10 +10,10 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.cell.cell import Cell
 from openpyxl.worksheet.worksheet import Worksheet
 
-import config
+from egrn import config
 
 if TYPE_CHECKING:
-    from search import LookupResult
+    from egrn.search import LookupResult
 
 
 HEADERS = ("Номер ЛС", "Адрес", "Успешен ли поиск", "Форма собственности", "Название файла скриншота")

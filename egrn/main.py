@@ -8,10 +8,7 @@ from openpyxl import load_workbook
 from playwright.sync_api import Error, Page
 from tqdm import tqdm
 
-import config
-import results
-import rosreestr
-import search
+from egrn import config, results, rosreestr, search
 
 EXIT_INTERRUPTED = 130
 
@@ -134,7 +131,3 @@ def run(
     timeout_ms: int = config.DEFAULT_TIMEOUT_MS,
 ) -> int:
     return _LookupRun(open_page, pause, timeout_ms).execute(root)
-
-
-if __name__ == "__main__":
-    sys.exit(run(Path(__file__).resolve().parent))

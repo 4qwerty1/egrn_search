@@ -4,11 +4,11 @@ from enum import StrEnum
 
 from playwright.sync_api import Locator, Page, expect
 
-import config
-from card_details import CardMatch, read_card
-from card_wait import MODAL, wait_for_card
-from rosreestr import require_session, visible_text
-from search_form import submit_search
+from egrn import config
+from egrn.card_details import CardMatch, read_card
+from egrn.card_wait import MODAL, wait_for_card
+from egrn.rosreestr import require_session, visible_text
+from egrn.search_form import submit_search
 
 
 RESULT_ROW = '[role="row"].rros-ui-lib-table__row'

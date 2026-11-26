@@ -10,7 +10,11 @@ wheels/
 .venv
 .playwright-mcp/
 
-# Результаты поиска
+# Локальные рабочие данные
+/data/*
+!/data/.gitkeep
+
+# Защита файлов из прежней раскладки и копий входной книги
 /result.xlsx
 /screenshots/*.png
 /error_detail
