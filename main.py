@@ -48,7 +48,7 @@ def _pending_addresses(
 ) -> dict[str, list[str]]:
     pending: dict[str, list[str]] = {}
     for account, address in addresses:
-        if not book.has_success(account, address):
+        if not book.has_result(account, address):
             pending.setdefault(address, []).append(account)
     return pending
 

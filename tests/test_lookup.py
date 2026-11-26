@@ -118,6 +118,8 @@ class BrowserLookupTests(LookupCase):
             {path.name for path in (self.root / SCREENSHOTS).iterdir()},
             {filename(missing), filename(duplicate), filename(found)},
         )
+        self.assertEqual(self.lookup({})[0], 0)
+        self.assertEqual(self.opens, 1)
 
     def test_captcha_after_save_stops_next_search(self):
         first, second = FIRST_ADDRESS, "Второй"
@@ -145,9 +147,13 @@ class BrowserLookupTests(LookupCase):
         expected = (FIRST_ACCOUNT, FIRST_ADDRESS, SUCCESS, PRIVATE_OWNERSHIP, filename(FIRST_ADDRESS))
         self.assertEqual(self.rows(), [HEADERS, expected])
 
-    def test_legacy_success_skips_browser_lookup(self):
-        self.write_addresses((101, FIRST_ADDRESS))
-        _write_book(self.excel, HEADERS, [(FIRST_ACCOUNT, FIRST_ADDRESS, True)])
+    def test_legacy_statuses_skip_browser_lookup(self):
+        missing = "Неизвестный адрес"
+        self.write_addresses((101, FIRST_ADDRESS), (101, missing))
+        _write_book(self.excel, HEADERS, [
+            (FIRST_ACCOUNT, FIRST_ADDRESS, True),
+            (FIRST_ACCOUNT, missing, False),
+        ])
         original = self.excel.read_bytes()
         self.assertEqual(self.lookup({})[0], 0)
         self.assertEqual(self.opens, 0)
@@ -155,37 +161,30 @@ class BrowserLookupTests(LookupCase):
 
 
 class WorkbookTests(LookupCase):
-    def test_resume_updates_failed_search_and_appends(self):
-        saved, retry, new = "Уже сохранён", "Повторная попытка", "Новый адрес"
-        self.write_addresses((101, saved), (102, retry))
+    def test_resume_skips_saved_results_and_appends(self):
+        saved, missing, new = "Уже сохранён", "Неизвестный адрес", "Новый адрес"
+        self.write_addresses((101, saved), (102, missing))
         self.assertEqual(
             self.lookup({
                 saved: positive(FIRST_NUMBER),
-                retry: returns_objects(),
+                missing: returns_objects(),
             }),
             (0, ""),
         )
         screenshot = self.root / SCREENSHOTS / filename(saved)
         original = screenshot.read_bytes()
 
-        self.write_addresses((103, new), (101, saved), (102, retry))
-        self.assertEqual(
-            self.lookup({
-                retry: positive("1:2:3:5"),
-                new: returns_objects(),
-            }),
-            (0, ""),
-        )
-        self.assertEqual(self.activity.submissions, [new, retry])
-        self.assertEqual(self.delays, [5])
+        self.write_addresses((103, new), (101, saved), (102, missing))
+        self.assertEqual(self.lookup({new: returns_objects()}), (0, ""))
+        self.assertEqual(self.activity.submissions, [new])
+        self.assertEqual(self.delays, [])
         self.assertEqual(self.rows(), [
             HEADERS,
             (FIRST_ACCOUNT, saved, SUCCESS, PRIVATE_OWNERSHIP, filename(saved)),
-            ("102", retry, SUCCESS, PRIVATE_OWNERSHIP, filename(retry)),
+            ("102", missing, "Адрес не найден", None, None),
             ("103", new, "Адрес не найден", None, None),
         ])
         self.assertEqual(screenshot.read_bytes(), original)
-        self._assert_successes_skipped(saved, retry)
 
     def test_invalid_workbook_never_opens_browser(self):
         self.write_addresses((101, FIRST_ADDRESS))
@@ -231,13 +230,6 @@ class WorkbookTests(LookupCase):
         self.write_addresses()
         self.assertEqual(self.lookup({}), (0, ""))
         return self.excel.read_bytes()
-
-    def _assert_successes_skipped(self, saved, retry):
-        self.write_addresses((101, saved), (102, retry))
-        workbook = self.excel.read_bytes()
-        self.assertEqual(self.lookup({}), (0, ""))
-        self.assertEqual(self.opens, 2)
-        self.assertEqual(self.excel.read_bytes(), workbook)
 
     def _assert_invalid_book(self, header, body, error):
         _write_book(self.excel, header, body)

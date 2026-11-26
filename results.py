@@ -41,12 +41,8 @@ class ResultSheet:
         self._sheet: Worksheet = sheet
         self._rows = rows
 
-    def has_success(self, account: str, address: str) -> bool:
-        row = self._rows.get((account, address))
-        if row is None:
-            return False
-        status = self._sheet.cell(row, FOUND_COLUMN).value
-        return status == SUCCESS_STATUS or status is True
+    def has_result(self, account: str, address: str) -> bool:
+        return (account, address) in self._rows
 
     def save(
         self, address: str, accounts: list[str],
