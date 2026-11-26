@@ -13,4 +13,5 @@ wheels/
 # Результаты поиска
 /result.xlsx
 /screenshots/*.png
+/error_detail
 *addresses*.xlsx*

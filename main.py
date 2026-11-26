@@ -5,7 +5,7 @@ from contextlib import AbstractContextManager, closing
 from pathlib import Path
 
 from openpyxl import load_workbook
-from playwright.sync_api import Page
+from playwright.sync_api import Error, Page
 from tqdm import tqdm
 
 import card_details
@@ -15,6 +15,13 @@ import search
 
 SEARCH_DELAY_SECONDS = 5
 EXIT_INTERRUPTED = 130
+
+
+def _save_error_detail(page: Page, path: Path) -> None:
+    try:
+        page.screenshot(path=path, type="png", full_page=True)
+    except (Error, OSError) as error:
+        sys.stderr.write(f"Не удалось сохранить снимок страницы в {path.name}: {error}\n")
 
 
 def _address_fields(
@@ -82,14 +89,24 @@ class _LookupRun:
         addresses = _read_addresses(root / "addresses.xlsx")
         with closing(results.load_results(root / "result.xlsx")) as book:
             pending = _pending_addresses(book, addresses)
-            if pending:
-                with self._open_page() as page:
-                    rosreestr.prepare_page(page, self._timeout_ms)
-                    self._search_pending(page, book, pending)
+            if not pending:
+                return
+            error_detail = root / "error_detail"
+            with self._open_page() as page:
+                try:
+                    self._search_pending(page, book, pending, error_detail)
+                except Exception:
+                    _save_error_detail(page, error_detail)
+                    raise
 
     def _search_pending(
-        self, page: Page, book: results.ResultSheet, pending: dict[str, list[str]],
+        self,
+        page: Page,
+        book: results.ResultSheet,
+        pending: dict[str, list[str]],
+        error_detail: Path,
     ) -> None:
+        rosreestr.prepare_page(page, self._timeout_ms)
         last_index = len(pending) - 1
         with tqdm(
             total=len(pending), desc="Поиск ЕГРН", unit="адр.",
@@ -102,6 +119,8 @@ class _LookupRun:
                     self._pause(SEARCH_DELAY_SECONDS)
                 match = search.lookup(page, address, self._timeout_ms, pause=self._pause)
                 rosreestr.require_session(page)
+                if isinstance(match, card_details.CardMatch) and match.error is not None:
+                    _save_error_detail(page, error_detail)
                 book.save(address, pending[address], match)
                 progress.update()
                 if isinstance(match, card_details.CardMatch) and index < last_index:

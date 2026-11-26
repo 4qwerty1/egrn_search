@@ -1,6 +1,7 @@
 from contextlib import closing
 from functools import partial
 from os import replace
+from struct import unpack_from
 from unittest.mock import patch
 
 from openpyxl import Workbook
@@ -24,6 +25,8 @@ FIRST_NUMBER = "1:2:3:4"
 FIRST_ACCOUNT = "101"
 SUCCESS = "Да"
 SPINNER_TIME = "spinnerMs"
+PNG_HEIGHT_OFFSET = 20
+MIN_ERROR_PAGE_HEIGHT = 900
 
 
 def _replace_unless(source, destination, *, blocked):
@@ -144,6 +147,7 @@ class BrowserLookupTests(LookupCase):
             ("102", duplicate, message, None, filename(duplicate)),
             ("103", found, SUCCESS, PRIVATE_OWNERSHIP, filename(found)),
         ])
+        self.assertTrue((self.root / "error_detail").read_bytes().startswith(b"\x89PNG\r\n\x1a\n"))
         self.assertEqual(
             {path.name for path in (self.root / SCREENSHOTS).iterdir()},
             {filename(missing), filename(duplicate), filename(found)},
@@ -152,18 +156,25 @@ class BrowserLookupTests(LookupCase):
         self.assertEqual(self.opens, 1)
 
     def test_captcha_after_save_stops_next_search(self):
-        first, second = FIRST_ADDRESS, "Второй"
-        self.write_addresses((101, first), (102, second))
+        second = "Второй"
+        self.write_addresses((FIRST_ACCOUNT, FIRST_ADDRESS), (102, second))
+        detail = self.root / "error_detail"
+        detail.write_bytes(b"previous screenshot")
         code, stderr = self.lookup({
-            first: {**positive(FIRST_NUMBER), "captchaAfterClose": True},
+            FIRST_ADDRESS: {**positive(FIRST_NUMBER), "captchaAfterClose": True},
             second: positive("1:2:3:5"),
         })
         self.assertEqual(code, 1)
         self.assertIn("CAPTCHA", stderr)
         self.assertIn(second, stderr)
-        self.assertEqual(self.activity.submissions, [first])
-        expected = (FIRST_ACCOUNT, first, SUCCESS, PRIVATE_OWNERSHIP, filename(first))
-        self.assertEqual(self.rows(), [HEADERS, expected])
+        png = detail.read_bytes()
+        self.assertEqual(png[:8], b"\x89PNG\r\n\x1a\n")
+        self.assertGreaterEqual(unpack_from(">I", png, PNG_HEIGHT_OFFSET)[0], MIN_ERROR_PAGE_HEIGHT)
+        self.assertEqual(self.activity.submissions, [FIRST_ADDRESS])
+        self.assertEqual(self.rows(), [
+            HEADERS,
+            (FIRST_ACCOUNT, FIRST_ADDRESS, SUCCESS, PRIVATE_OWNERSHIP, filename(FIRST_ADDRESS)),
+        ])
 
     def test_mutated_counter_is_not_fresh(self):
         second = "Без нового счётчика"

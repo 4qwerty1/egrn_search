@@ -21,6 +21,7 @@ DOCUMENT = """<!doctype html>
 <meta charset="utf-8">
 <style>
     body { line-height: 24px; }
+    body:has(#captcha) { min-height: 900px; }
     h1 { margin: 0; line-height: 32px; }
     .rros-ui-lib-spinner__loader { width: 24px; height: 24px; }
     ul { margin: 0; }
