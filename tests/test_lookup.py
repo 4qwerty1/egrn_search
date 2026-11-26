@@ -61,8 +61,25 @@ class BrowserLookupTests(LookupCase):
             (FIRST_ACCOUNT, second, SUCCESS, "Муниципальная", filename(second)),
         ])
         for address in first, second:
-            png = self.decode_png(address)
+            png = self.decode_png(filename(address))
             self.assertEqual(png, [320, 180, [248, 248, 248, 255]])
+
+    def test_screenshot_keeps_existing_files(self):
+        address = r'улица Первая, 1/2\:*?"<>|.'
+        self.write_addresses((101, address))
+        (self.root / SCREENSHOTS).mkdir()
+        plain = self.root / SCREENSHOTS / "улица Первая, 12.png"
+        occupied = self.root / SCREENSHOTS / "улица Первая, 12_00000.png"
+        plain.write_bytes(b"first")
+        occupied.write_bytes(b"second")
+
+        scenarios = {address: positive(FIRST_NUMBER)}
+        self.assertEqual(self.lookup(scenarios)[0], 0)
+        saved = self.rows()[1][-1]
+        self.assertRegex(saved, r"^улица Первая, 12_[0-9a-f]{5}\.png$")
+        self.assertEqual(self.decode_png(saved)[:2], [320, 180])
+        self.assertEqual(plain.read_bytes(), b"first")
+        self.assertEqual(occupied.read_bytes(), b"second")
 
     def test_empty_result_then_blank_ownership(self):
         missing, found = "Неизвестный адрес", "Существующий адрес"

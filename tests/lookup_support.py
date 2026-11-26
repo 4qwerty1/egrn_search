@@ -3,7 +3,6 @@ import contextlib
 import io
 import json
 import unittest
-from hashlib import sha256
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import NamedTuple
@@ -125,8 +124,7 @@ search.addEventListener('click', () => {
 
 
 def filename(address: str) -> str:
-    digest = sha256(address.encode()).hexdigest()
-    return f"{digest}.png"
+    return f"{address}.png"
 
 
 def returns_objects(*entries):
@@ -198,8 +196,8 @@ class LookupCase(unittest.TestCase):
         with contextlib.closing(load_workbook(self.excel, read_only=True)) as book:
             return list(book[SHEET].values)
 
-    def decode_png(self, address):
-        png = (self.root / SCREENSHOTS / filename(address)).read_bytes()
+    def decode_png(self, name):
+        png = (self.root / SCREENSHOTS / name).read_bytes()
         self.assertEqual(png[:8], b"\x89PNG\r\n\x1a\n")
         with contextlib.closing(self.browser.new_page()) as page:
             return page.evaluate(

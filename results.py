@@ -1,7 +1,7 @@
 import os
+import re
 from collections.abc import Callable, Iterator
 from contextlib import ExitStack
-from hashlib import sha256
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING, cast
@@ -18,6 +18,14 @@ SHEET = "Результаты"
 HEADERS = ("Номер ЛС", "Адрес", "Успешен ли поиск", "Форма собственности", "Название файла скриншота")
 FOUND_COLUMN = 3
 SUCCESS_STATUS = "Да"
+INVALID_FILENAME_CHARACTERS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+WINDOWS_DEVICE_NAME = re.compile(
+    r"^(?:CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|(?:COM|LPT)[1-9¹²³])(?: *\.|$)",
+    re.IGNORECASE | re.ASCII,
+)
+MAX_SCREENSHOT_STEM_BYTES = 244  # Оставляем место для «_» перед именем устройства и «_00000.png».
+SCREENSHOT_SUFFIX_COUNT = 0x100000
+TEMP_PREFIX_NAME_LENGTH = 32
 
 type SheetRow = tuple[object, ...]
 type ResultFields = tuple[str, str, str, str | None, str | None]
@@ -73,7 +81,8 @@ class ResultSheet:
 
 
 def _publish(path: Path, write: Callable[[Path], object]) -> None:
-    with NamedTemporaryFile(dir=path.parent, prefix=f".{path.name}.", delete=False) as stream:
+    prefix = path.name[:TEMP_PREFIX_NAME_LENGTH]
+    with NamedTemporaryFile(dir=path.parent, prefix=f".{prefix}.", delete=False) as stream:
         temporary = Path(stream.name)
     with ExitStack() as cleanup:
         cleanup.callback(temporary.unlink, missing_ok=True)
@@ -83,12 +92,23 @@ def _publish(path: Path, write: Callable[[Path], object]) -> None:
 
 
 def _store_screenshot(root: Path, address: str, png: bytes) -> str:
-    digest = sha256(address.encode("utf-8")).hexdigest()
-    filename = f"{digest}.png"
+    stem = INVALID_FILENAME_CHARACTERS.sub("", address)
+    stem = stem.encode()[:MAX_SCREENSHOT_STEM_BYTES].decode(errors="ignore")
+    stem = stem.rstrip(" .") or "Адрес"
+    if WINDOWS_DEVICE_NAME.match(stem):
+        stem = f"_{stem}"
     screenshots = root / "screenshots"
     screenshots.mkdir(exist_ok=True)
-    _publish(screenshots / filename, lambda temporary: temporary.write_bytes(png))
-    return filename
+    path = screenshots / f"{stem}.png"
+    suffix = 0
+    while path.exists(follow_symlinks=False):
+        if suffix == SCREENSHOT_SUFFIX_COUNT:
+            raise FileExistsError(f"Нет свободного имени для скриншота: {stem}")
+        name = "{0}_{1:05x}.png".format(stem, suffix)
+        path = screenshots / name
+        suffix += 1
+    _publish(path, lambda temporary: temporary.write_bytes(png))
+    return path.name
 
 
 def _validate_header(path: Path, header: SheetRow) -> None:
