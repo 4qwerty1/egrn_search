@@ -87,7 +87,7 @@ class _LookupRun:
             pending = _pending_addresses(book, addresses)
             if not pending:
                 return
-            error_detail = (root / config.RESULTS_FILE).with_name(config.ERROR_DETAIL_FILE)
+            error_detail = root / config.ERROR_DETAIL_FILE
             with self._open_page() as page:
                 try:
                     self._search_pending(page, book, pending, error_detail)

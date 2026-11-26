@@ -166,7 +166,9 @@ class BrowserLookupTests(LookupCase):
             ("102", duplicate, message, None, filename(duplicate)),
             ("103", found, SUCCESS, PRIVATE_OWNERSHIP, filename(found)),
         ])
-        self.assertTrue((self.root / "error_detail").read_bytes().startswith(b"\x89PNG\r\n\x1a\n"))
+        self.assertTrue(
+            (self.root / "error_detail.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n"),
+        )
         self.assertEqual(
             {path.name for path in (self.root / SCREENSHOTS).iterdir()},
             {filename(missing), filename(duplicate), filename(found)},
@@ -177,7 +179,7 @@ class BrowserLookupTests(LookupCase):
     def test_captcha_after_save_stops_next_search(self):
         second = "Второй"
         self.write_addresses((FIRST_ACCOUNT, FIRST_ADDRESS), (102, second))
-        detail = self.root / "error_detail"
+        detail = self.root / "error_detail.png"
         detail.write_bytes(b"previous screenshot")
         code, stderr = self.lookup({
             FIRST_ADDRESS: {**positive(FIRST_NUMBER), "captchaAfterClose": True},

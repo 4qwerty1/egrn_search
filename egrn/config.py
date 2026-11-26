@@ -1,9 +1,9 @@
-# Имена книг относительно каталога данных; скриншоты и снимок ошибки — рядом с книгой результатов.
+# Имена файлов и каталогов относительно каталога данных.
 ADDRESSES_FILE = "addresses.xlsx"
 RESULTS_FILE = "result.xlsx"
 RESULTS_SHEET = "Результаты"
 SCREENSHOTS_DIR = "screenshots"
-ERROR_DETAIL_FILE = "error_detail"
+ERROR_DETAIL_FILE = "error_detail.png"
 
 # Размер области страницы Chromium в пикселях.
 VIEWPORT_WIDTH = 1900
