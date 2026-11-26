@@ -4,11 +4,14 @@ from contextlib import ExitStack
 from hashlib import sha256
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.cell.cell import Cell
 from openpyxl.worksheet.worksheet import Worksheet
+
+if TYPE_CHECKING:
+    from search import CardMatch
 
 
 SHEET = "Результаты"
@@ -16,7 +19,7 @@ HEADERS = ("Номер ЛС", "Адрес", "Успешен ли поиск", "�
 FOUND_COLUMN = 3
 
 type SheetRow = tuple[object, ...]
-type ResultFields = tuple[str, str, bool, str | None, str | None]
+type ResultFields = tuple[str, str, bool | str, str | None, str | None]
 type RowIndex = dict[tuple[str, str], int]
 
 
@@ -35,16 +38,18 @@ class ResultSheet:
 
     def save(
         self, address: str, accounts: list[str],
-        match: tuple[str, bytes] | None,
+        match: "CardMatch | None",
     ) -> None:
+        found: bool | str = "Адрес не найден"
         ownership = None
         filename = None
         if match is not None:
-            ownership, png = match
-            filename = _store_screenshot(self._path.parent, address, png)
+            found = match.error or True
+            ownership = match.ownership
+            filename = _store_screenshot(self._path.parent, address, match.png)
 
         for account in accounts:
-            self._write_row((account, address, match is not None, ownership, filename))
+            self._write_row((account, address, found, ownership, filename))
         _publish(self._path, self._workbook.save)
 
     def close(self) -> None:
@@ -97,8 +102,9 @@ def _check_key(path: Path, number: int, columns: SheetRow) -> tuple[str, str]:
     if not isinstance(address, str) or not address.strip():
         raise ValueError(f"{path.name}: нет адреса в строке {number}.")
     found = columns[FOUND_COLUMN - 1]
-    if found is not True and found is not False:
-        raise ValueError(f"{path.name}: в строке {number} флаг поиска не Boolean.")
+    has_message = isinstance(found, str) and found.strip()
+    if not isinstance(found, bool) and not has_message:
+        raise ValueError(f"{path.name}: в строке {number} нужен логический статус поиска или текст ошибки.")
     return account, address
 
 

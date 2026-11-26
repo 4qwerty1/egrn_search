@@ -57,7 +57,9 @@ function showCard(number, ownership, captcha) {
             <div class="build-card-wrapper card"><ul></ul></div>
             <button class="realestate-object-modal__btn">ВЕРНУТЬСЯ К РЕЗУЛЬТАТАМ ПОИСКА</button>
         </section>`;
-    for (const [label, value] of [['Кадастровый номер', number], ['Форма собственности', ownership]]) {
+    const values = Array.isArray(ownership) ? ownership : [ownership];
+    const fields = [['Кадастровый номер', number], ...values.map(value => ['Форма собственности', value])];
+    for (const [label, value] of fields) {
         const row = document.createElement('li');
         row.className = infoClass;
         row.innerHTML = `<span class="${infoClass}__name"></span><div class="${infoClass}__options"></div>`;
@@ -101,6 +103,7 @@ function publishResults(objects, captcha) {
 }
 
 search.addEventListener('click', () => {
+    if (details.firstElementChild) return;
     const address = query.value;
     window.submissions.push(address);
     const scenario = scenarios[address];

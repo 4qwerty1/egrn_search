@@ -72,12 +72,34 @@ class BrowserLookupTests(LookupCase):
         self.assertEqual(self.delays, [5])
         self.assertEqual(self.rows(), [
             HEADERS,
-            (FIRST_ACCOUNT, missing, False, None, None),
+            (FIRST_ACCOUNT, missing, "Адрес не найден", None, None),
             ("102", found, True, None, filename(found)),
         ])
         screenshots = self.root / SCREENSHOTS
         names = {path.name for path in screenshots.iterdir()}
         self.assertEqual(names, {filename(found)})
+
+    def test_ownership_field_error_continues(self):
+        missing, duplicate, found = "Без поля", "Два поля", "Следующий адрес"
+        self.write_addresses((101, missing), (102, duplicate), (103, found))
+        scenarios = {
+            missing: positive(FIRST_NUMBER, []),
+            duplicate: positive("1:2:3:5", [PRIVATE_OWNERSHIP, "Другая"]),
+            found: positive("1:2:3:6"),
+        }
+        self.assertEqual(self.lookup(scenarios)[0], 0)
+        self.assertEqual(self.activity.submissions, [missing, duplicate, found])
+        message = "В карточке отсутствует или дублируется поле «Форма собственности»."
+        self.assertEqual(self.rows(), [
+            HEADERS,
+            (FIRST_ACCOUNT, missing, message, None, filename(missing)),
+            ("102", duplicate, message, None, filename(duplicate)),
+            ("103", found, True, PRIVATE_OWNERSHIP, filename(found)),
+        ])
+        self.assertEqual(
+            {path.name for path in (self.root / SCREENSHOTS).iterdir()},
+            {filename(missing), filename(duplicate), filename(found)},
+        )
 
     def test_captcha_after_save_stops_next_search(self):
         first, second = FIRST_ADDRESS, "Второй"
@@ -107,7 +129,7 @@ class BrowserLookupTests(LookupCase):
 
 
 class WorkbookTests(LookupCase):
-    def test_resume_updates_false_and_appends(self):
+    def test_resume_updates_failed_search_and_appends(self):
         saved, retry, new = "Уже сохранён", "Повторная попытка", "Новый адрес"
         self.write_addresses((101, saved), (102, retry))
         self.assertEqual(
@@ -134,7 +156,7 @@ class WorkbookTests(LookupCase):
             HEADERS,
             (FIRST_ACCOUNT, saved, True, PRIVATE_OWNERSHIP, filename(saved)),
             ("102", retry, True, PRIVATE_OWNERSHIP, filename(retry)),
-            ("103", new, False, None, None),
+            ("103", new, "Адрес не найден", None, None),
         ])
         self.assertEqual(screenshot.read_bytes(), original)
         self._assert_successes_skipped(saved, retry)
@@ -150,7 +172,7 @@ class WorkbookTests(LookupCase):
             ),
             (HEADERS, [(FIRST_ACCOUNT, None, False)], "нет адреса"),
             (HEADERS, [(None, FIRST_ADDRESS, False)], "нет номера ЛС"),
-            (HEADERS, [(FIRST_ACCOUNT, FIRST_ADDRESS, 1)], "не Boolean"),
+            (HEADERS, [(FIRST_ACCOUNT, FIRST_ADDRESS, 1)], "нужен логический статус поиска"),
         ):
             with self.subTest(error=error):
                 self._assert_invalid_book(header, body, error)

@@ -1,5 +1,6 @@
 import re
 import time
+from typing import NamedTuple
 
 from playwright.sync_api import Locator, Page
 
@@ -14,19 +15,42 @@ FIELD = "build-card-wrapper__info__ul__subinfo"
 SCREENSHOT_DELAY_SECONDS = 0.5
 
 
+class CardMatch(NamedTuple):
+    ownership: str | None
+    png: bytes
+    error: str | None
+
+
+class _CardFieldError(RuntimeError):
+    """Название поля отсутствует или дублируется."""
+
+
 def _field_text(card: Locator, label: str) -> str:
     name = card.locator(f"li.{FIELD} > span.{FIELD}__name").filter(
         has_text=re.compile(rf"^\s*{re.escape(label)}\s*$"),
     )
     if name.count() != 1:
-        raise RuntimeError(f"В карточке отсутствует или дублируется поле «{label}».")
+        raise _CardFieldError(f"В карточке отсутствует или дублируется поле «{label}».")
     options = name.locator("..").locator(f":scope > div.{FIELD}__options")
     if options.count() != 1:
         raise RuntimeError(f"Не найден единственный контейнер значения поля «{label}».")
     return options.inner_text().strip()
 
 
-def _inspect_row(page: Page, row: Locator, empty: Locator) -> tuple[str, bytes]:
+def _capture_card(page: Page, card: Locator) -> CardMatch:
+    ownership = None
+    error = None
+    try:
+        ownership = _field_text(card, "Форма собственности")
+    except _CardFieldError as missing:
+        error = str(missing)
+    time.sleep(SCREENSHOT_DELAY_SECONDS)
+    require_session(page)
+    png = card.screenshot(type="png", animations="disabled", scale="css", timeout=DEFAULT_TIMEOUT_MS)
+    return CardMatch(ownership, png, error)
+
+
+def _inspect_row(page: Page, row: Locator, empty: Locator) -> CardMatch:
     row.wait_for()
     if empty.count():
         raise RuntimeError("Ненулевой счётчик результатов при сообщении об их отсутствии.")
@@ -41,14 +65,10 @@ def _inspect_row(page: Page, row: Locator, empty: Locator) -> tuple[str, bytes]:
     card.wait_for()
     if _field_text(card, "Кадастровый номер") != number:
         raise RuntimeError(f"Кадастровый номер карточки не совпадает с номером результата {number!r}.")
-    ownership = _field_text(card, "Форма собственности")
-    time.sleep(SCREENSHOT_DELAY_SECONDS)
-    require_session(page)
-    png = card.screenshot(type="png", animations="disabled", scale="css", timeout=DEFAULT_TIMEOUT_MS)
-    return ownership, png
+    return _capture_card(page, card)
 
 
-def lookup(page: Page, address: str, timeout_ms: int) -> tuple[str, bytes] | None:
+def lookup(page: Page, address: str, timeout_ms: int) -> CardMatch | None:
     count = submit_search(page, address, timeout_ms)
     rows = page.locator(f"{RESULT_ROW}:visible")
     empty = visible_text(page, NO_RESULTS)
