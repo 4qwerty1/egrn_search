@@ -1,4 +1,5 @@
 import re
+from collections.abc import Callable
 from contextlib import ExitStack
 
 from playwright.sync_api import ElementHandle, Locator, Page, expect
@@ -8,6 +9,7 @@ from rosreestr import PAGE_STATE, QUERY, SEARCH, require_session, visible_text
 
 TOTAL = "span.realestateobjects-wrapper__results__total-count"
 DUPLICATE_COUNTER = "Видно несколько счётчиков результатов."
+ADDRESS_DELAY_SECONDS = 1
 FRESH_COUNTER = f"""
 old => {{
     {PAGE_STATE}
@@ -20,7 +22,9 @@ old => {{
 }}"""
 
 
-def _fill_search(page: Page, address: str, timeout_ms: int) -> Locator:
+def _fill_search(
+    page: Page, address: str, timeout_ms: int, pause: Callable[[float], None],
+) -> Locator:
     require_session(page)
     if not (
         visible_text(page, "Поиск по адресу и кадастровому номеру").count()
@@ -29,6 +33,7 @@ def _fill_search(page: Page, address: str, timeout_ms: int) -> Locator:
         raise RuntimeError("Изменился тип поиска или заполнен вид объекта.")
 
     page.locator(f"{QUERY}:visible").fill(address)
+    pause(ADDRESS_DELAY_SECONDS)
     button = page.locator(f"{SEARCH}:visible")
     expect(button).to_be_enabled(timeout=timeout_ms)
     return button
@@ -66,7 +71,9 @@ def _result_count(page: Page, state: dict[str, str]) -> int:
     return int(match[1])
 
 
-def submit_search(page: Page, address: str, timeout_ms: int) -> int:
-    button = _fill_search(page, address, timeout_ms)
+def submit_search(
+    page: Page, address: str, timeout_ms: int, *, pause: Callable[[float], None],
+) -> int:
+    button = _fill_search(page, address, timeout_ms, pause)
     state = _search_state(page, button, timeout_ms)
     return _result_count(page, state)

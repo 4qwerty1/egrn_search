@@ -99,7 +99,7 @@ class _LookupRun:
                 if index:
                     rosreestr.require_session(page)
                     self._pause(SEARCH_DELAY_SECONDS)
-                match = search.lookup(page, address, self._timeout_ms)
+                match = search.lookup(page, address, self._timeout_ms, pause=self._pause)
                 rosreestr.require_session(page)
                 book.save(address, pending[address], match)
                 progress.update()

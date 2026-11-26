@@ -53,7 +53,11 @@ class BrowserLookupTests(LookupCase):
         self.assertEqual(self.lookup(scenarios), (0, ""))
         self.assertEqual(self.activity.submissions, [first, second])
         self.assertEqual(self.activity.opened, ["99:01:2:8", "99:01:3:9"])
-        self.assertEqual(self.delays, [5])
+        self.assertEqual(self.delays, [
+            1, 1, 0.5, 1,
+            5,
+            1, 1, 0.5, 1,
+        ])
         self.assertEqual(self.rows(), [
             HEADERS,
             (FIRST_ACCOUNT, first, SUCCESS, PRIVATE_OWNERSHIP, filename(first)),
@@ -87,7 +91,7 @@ class BrowserLookupTests(LookupCase):
         scenarios = {missing: returns_objects(), found: positive(FIRST_NUMBER, "")}
         self.assertEqual(self.lookup(scenarios), (0, ""))
         self.assertEqual(self.activity.submissions, [missing, found])
-        self.assertEqual(self.delays, [5])
+        self.assertEqual(self.delays, [1, 1, 5, 1, 1, 0.5, 1])
         self.assertEqual(self.rows(), [
             HEADERS,
             (FIRST_ACCOUNT, missing, "Адрес не найден", None, None),
@@ -177,7 +181,7 @@ class WorkbookTests(LookupCase):
         self.write_addresses((103, new), (101, saved), (102, missing))
         self.assertEqual(self.lookup({new: returns_objects()}), (0, ""))
         self.assertEqual(self.activity.submissions, [new])
-        self.assertEqual(self.delays, [])
+        self.assertEqual(self.delays, [1, 1])
         self.assertEqual(self.rows(), [
             HEADERS,
             (FIRST_ACCOUNT, saved, SUCCESS, PRIVATE_OWNERSHIP, filename(saved)),

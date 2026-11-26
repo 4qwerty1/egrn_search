@@ -1,5 +1,5 @@
 import re
-import time
+from collections.abc import Callable
 from typing import NamedTuple
 
 from playwright.sync_api import Locator, Page
@@ -12,7 +12,9 @@ RESULT_ROW = '[role="row"].rros-ui-lib-table__row'
 NO_RESULTS = "По заданным критериям поиска объекты не найдены"
 CARD = ".realestate-object-modal .build-card-wrapper.card"
 FIELD = "build-card-wrapper__info__ul__subinfo"
+RESULT_DELAY_SECONDS = 1
 SCREENSHOT_DELAY_SECONDS = 0.5
+AFTER_SCREENSHOT_DELAY_SECONDS = 1
 
 
 class CardMatch(NamedTuple):
@@ -37,23 +39,27 @@ def _field_text(card: Locator, label: str) -> str:
     return options.inner_text().strip()
 
 
-def _capture_card(page: Page, card: Locator) -> CardMatch:
+def _capture_card(page: Page, card: Locator, pause: Callable[[float], None]) -> CardMatch:
     ownership = None
     error = None
     try:
         ownership = _field_text(card, "Форма собственности")
     except _CardFieldError as missing:
         error = str(missing)
-    time.sleep(SCREENSHOT_DELAY_SECONDS)
+    pause(SCREENSHOT_DELAY_SECONDS)
     require_session(page)
     png = card.screenshot(type="png", animations="disabled", scale="css", timeout=DEFAULT_TIMEOUT_MS)
+    pause(AFTER_SCREENSHOT_DELAY_SECONDS)
     return CardMatch(ownership, png, error)
 
 
-def _inspect_row(page: Page, row: Locator, empty: Locator) -> CardMatch:
+def _inspect_row(
+    page: Page, row: Locator, empty: Locator, pause: Callable[[float], None],
+) -> CardMatch:
     row.wait_for()
     if empty.count():
         raise RuntimeError("Ненулевой счётчик результатов при сообщении об их отсутствии.")
+    pause(RESULT_DELAY_SECONDS)
     number = row.locator('[role="cell"]').first.inner_text().strip()
     if not number:
         raise RuntimeError("В первой строке выдачи нет кадастрового номера.")
@@ -65,19 +71,22 @@ def _inspect_row(page: Page, row: Locator, empty: Locator) -> CardMatch:
     card.wait_for()
     if _field_text(card, "Кадастровый номер") != number:
         raise RuntimeError(f"Кадастровый номер карточки не совпадает с номером результата {number!r}.")
-    return _capture_card(page, card)
+    return _capture_card(page, card, pause)
 
 
-def lookup(page: Page, address: str, timeout_ms: int) -> CardMatch | None:
-    count = submit_search(page, address, timeout_ms)
+def lookup(
+    page: Page, address: str, timeout_ms: int, *, pause: Callable[[float], None],
+) -> CardMatch | None:
+    count = submit_search(page, address, timeout_ms, pause=pause)
     rows = page.locator(f"{RESULT_ROW}:visible")
     empty = visible_text(page, NO_RESULTS)
     if count == 0:
         empty.first.wait_for()
         if rows.count():
             raise RuntimeError("Нулевой счётчик результатов при наличии строк выдачи.")
+        pause(RESULT_DELAY_SECONDS)
         return None
-    return _inspect_row(page, rows.first, empty)
+    return _inspect_row(page, rows.first, empty, pause)
 
 
 def close_card(page: Page) -> None:
