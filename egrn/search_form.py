@@ -1,8 +1,8 @@
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from contextlib import ExitStack
 
-from playwright.sync_api import ElementHandle, Locator, Page, TimeoutError, expect
+from playwright.sync_api import Locator, Page, TimeoutError, expect
 
 from egrn import config
 from egrn.rosreestr import PAGE_STATE, QUERY, SEARCH, require_session, reset_search, visible_text
@@ -52,22 +52,30 @@ def _prepare_attempt(
 
     query.fill(address)
     pause(config.ADDRESS_DELAY_SECONDS)
-    button = page.locator(f"{SEARCH}:visible")
-    expect(button).to_be_enabled(timeout=timeout_ms)
-    return button
+    return page.locator(f"{SEARCH}:visible")
 
 
-def _previous_counter(page: Page) -> ElementHandle | None:
+def _wait_for_button(page: Page, button: Locator, *, retries: int) -> bool:
+    try:
+        expect(button).to_be_enabled(timeout=config.SEARCH_BUTTON_TIMEOUT_MS)
+    except AssertionError as error:
+        require_session(page)
+        if retries >= config.SEARCH_BUTTON_RETRIES:
+            raise TimeoutError(
+                f"Кнопка «НАЙТИ» не стала активной за {config.SEARCH_BUTTON_TIMEOUT_MS} мс "
+                f"даже после {retries} повторов.",
+            ) from error
+        return False
+    return True
+
+
+def _search_state(page: Page, button: Locator, timeout_ms: int) -> dict[str, str] | None:
     counters = page.locator(f"{TOTAL}:visible")
     counter_count = counters.count()
     if counter_count > 1:
         raise RuntimeError(DUPLICATE_COUNTER)
-    return counters.element_handle() if counter_count else None
-
-
-def _search_state(page: Page, button: Locator, timeout_ms: int) -> dict[str, str] | None:
     with ExitStack() as handles:
-        old = _previous_counter(page)
+        old = counters.element_handle() if counter_count else None
         if old is not None:
             handles.callback(old.dispose)
         require_session(page)
@@ -92,18 +100,32 @@ def _result_count(page: Page, state: dict[str, str]) -> int:
     return int(match[1])
 
 
+def _search_attempts(
+    page: Page, address: str, timeout_ms: int, *, pause: Callable[[float], None],
+) -> Iterator[Locator | None]:
+    attempt = 0
+    button_retries = 0
+    while attempt < config.SEARCH_ATTEMPTS:
+        button = _prepare_attempt(page, address, timeout_ms, pause, retry=bool(attempt or button_retries))
+        if button is not None and not _wait_for_button(page, button, retries=button_retries):
+            button_retries += 1
+            continue
+        attempt += 1
+        yield button
+
+
 def submit_search(
     page: Page, address: str, timeout_ms: int, *, pause: Callable[[float], None],
 ) -> int:
-    button = None
-    for attempt in range(config.SEARCH_ATTEMPTS):
-        button = _prepare_attempt(page, address, timeout_ms, pause, retry=attempt > 0)
+    form_ready = False
+    for button in _search_attempts(page, address, timeout_ms, pause=pause):
+        form_ready = button is not None
         if button is None:
             continue
         state = _search_state(page, button, timeout_ms)
         if state is not None:
             return _result_count(page, state)
-    if button is None:
+    if not form_ready:
         raise RuntimeError(f"Форма поиска недоступна или изменилась после {config.SEARCH_ATTEMPTS} попыток.")
     raise TimeoutError(
         f"Не дождались новой выдачи за {config.SEARCH_ATTEMPTS} попытки (тайм-аут: {timeout_ms} мс на попытку).",

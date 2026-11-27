@@ -61,7 +61,11 @@ if (sessionStorage.getItem('hideFormOnReload')) {
     searchForm.hidden = true;
 }
 
-query.addEventListener('input', () => { search.disabled = !query.value; });
+const navigation = Number(sessionStorage.getItem('navigation') || 0) + 1;
+sessionStorage.setItem('navigation', navigation);
+query.addEventListener('input', () => {
+    search.disabled = !query.value || navigation <= (scenarios[query.value]?.disableSearchOnFirstPages || 0);
+});
 
 function cardSection(title, fields) {
     const section = document.createElement('div');
